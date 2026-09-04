@@ -3,11 +3,12 @@
 A process table for coding agent sessions, the way `ps` would look if it knew
 what a session was.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square)
-![macOS and Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey?style=flat-square)
-![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen?style=flat-square)
-![7 agents](https://img.shields.io/badge/agents-7-orange?style=flat-square)
+[![ci](https://img.shields.io/github/actions/workflow/status/mkhuda/agent-ps/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/mkhuda/agent-ps/actions/workflows/ci.yml)
+[![pypi](https://img.shields.io/pypi/v/agent-ps?style=flat-square&color=blue)](https://pypi.org/project/agent-ps/)
+[![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+![python](https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square)
+![agents](https://img.shields.io/badge/agents-7-orange?style=flat-square)
+![dependencies](https://img.shields.io/badge/dependencies-none-brightgreen?style=flat-square)
 
 ![agent-ps listing sessions from claude, hermes, codex, opencode, pi, commandcode and copilot side by side, each with its model, uptime, idle time, cpu, memory, disk and working directory, with two hermes background helpers at the bottom](images/agent-ps-screenshot.jpg)
 
@@ -36,19 +37,26 @@ install elsewhere, or `AGENT_PS_REF=v0.1.0` to pin a version.
 
 ### With a package runner
 
-```bash
-uvx agent-ps                  # uv
-pipx install agent-ps         # pipx
-pip install agent-ps          # pip
+From [PyPI](https://pypi.org/project/agent-ps/), which installs the program
+itself:
 
-npx @mkhuda/agent-ps          # npm
-pnpm dlx @mkhuda/agent-ps     # pnpm
-bunx @mkhuda/agent-ps         # bun
+```bash
+uvx agent-ps                  # run it once
+pipx install agent-ps         # keep it, isolated
+pip install agent-ps          # keep it, wherever pip points
 ```
 
-The Python packages install the program itself. The npm one carries the same
-executable and finds an interpreter for it, which is why it is scoped: the plain
-name is too close to an existing package. Either way the command is `agent-ps`.
+From [npm](https://www.npmjs.com/package/@mkhuda/agent-ps), which carries the
+same single executable and finds an interpreter for it:
+
+```bash
+npx @mkhuda/agent-ps
+pnpm dlx @mkhuda/agent-ps
+bunx @mkhuda/agent-ps
+```
+
+The npm package is scoped because the plain name is too close to an existing
+one. Either way the command it gives you is `agent-ps`.
 
 ### Just the file
 
