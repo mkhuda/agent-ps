@@ -251,6 +251,28 @@ class Tui:
         self.cursor = max(0, min(self.cursor, len(self.rows) - 1))
         self.last_poll = time.time()
         self.history = self.snapshot.history()
+        # every pass builds new row objects, so a panel holding one from the
+        # last pass would sit there showing the cpu and uptime it had when it
+        # was opened
+        if self.detail:
+            self.detail = self.same_row(self.detail) or self.detail
+
+    def same_row(self, row):
+        """The current version of a row, if it is still on screen.
+
+        Matched on the session where there is one, since a session outlives the
+        process that ran it, and on the PID otherwise, which is what background
+        helpers have instead.
+        """
+        for other in self.rows:
+            if other["agent"] != row["agent"]:
+                continue
+            if row["session_id"]:
+                if other["session_id"] == row["session_id"]:
+                    return other
+            elif row["pid"] and other["pid"] == row["pid"]:
+                return other
+        return None
 
     def selected(self):
         return self.rows[self.cursor] if self.rows else None
