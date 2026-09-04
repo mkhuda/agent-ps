@@ -1,7 +1,12 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-screenshot.jpg" width="900"
+     alt="agent-ps listing sessions from claude, hermes, codex, opencode, pi, commandcode and copilot side by side, each with its model, uptime, idle time, cpu, memory, disk and working directory, with two hermes background helpers at the bottom">
+
 # agent-ps
 
-A process table for coding agent sessions, the way `ps` would look if it knew
-what a session was.
+**A process table for coding agent sessions, the way `ps` would look if it knew
+what a session was.**
 
 [![ci](https://img.shields.io/github/actions/workflow/status/mkhuda/agent-ps/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/mkhuda/agent-ps/actions/workflows/ci.yml)
 [![pypi](https://img.shields.io/pypi/v/agent-ps?style=flat-square&color=blue)](https://pypi.org/project/agent-ps/)
@@ -11,7 +16,7 @@ what a session was.
 ![agents](https://img.shields.io/badge/agents-7-orange?style=flat-square)
 ![dependencies](https://img.shields.io/badge/dependencies-none-brightgreen?style=flat-square)
 
-![agent-ps listing sessions from claude, hermes, codex, opencode, pi, commandcode and copilot side by side, each with its model, uptime, idle time, cpu, memory, disk and working directory, with two hermes background helpers at the bottom](images/agent-ps-screenshot.jpg)
+</div>
 
 `ps aux | grep claude` gives you PIDs. It will not tell you which one is the
 session you are talking to, what model it is spending on, whether it has been
@@ -156,7 +161,7 @@ something.
 Those keys live at the bottom of the screen, under a line naming every agent on
 screen in its own colour and, on the right, what the table is sorted by:
 
-![The bottom of the screen: a legend naming each agent in its own colour, the sort shown in words on the right, and the key bar beneath it](images/agent-ps-footer-screenshot.jpg)
+![The bottom of the screen: a legend naming each agent in its own colour, the sort shown in words on the right, and the key bar beneath it](https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-footer-screenshot.jpg)
 
 That middle line does three jobs. It is the key to the colours in the AGENT
 column, it says the sort order in words so the marked heading is never a guess,
