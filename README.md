@@ -11,10 +11,17 @@ what a session was.**
 [![ci](https://img.shields.io/github/actions/workflow/status/mkhuda/agent-ps/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/mkhuda/agent-ps/actions/workflows/ci.yml)
 [![pypi](https://img.shields.io/pypi/v/agent-ps?style=flat-square&color=blue)](https://pypi.org/project/agent-ps/)
 [![npm](https://img.shields.io/npm/v/%40mkhuda%2Fagent-ps?style=flat-square&color=blue&label=npm)](https://www.npmjs.com/package/@mkhuda/agent-ps)
-[![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/mkhuda/agent-ps/blob/main/LICENSE)
 ![python](https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square)
 ![agents](https://img.shields.io/badge/agents-7-orange?style=flat-square)
 ![dependencies](https://img.shields.io/badge/dependencies-none-brightgreen?style=flat-square)
+
+[Install](#install) | [Usage](#usage) | [Agents](#agents) |
+[Scripting](#scripting) | [How it works](https://github.com/mkhuda/agent-ps/blob/main/docs/internals.md)
+
+```
+curl -fsSL https://raw.githubusercontent.com/mkhuda/agent-ps/main/install.sh | sh
+```
 
 </div>
 
@@ -315,7 +322,7 @@ itself can answer. Nothing is invented to fill the gap.
 ## How it works
 
 The parts that are not obvious have their own page:
-[where each agent keeps its sessions](docs/internals.md), how busy and idle are
+[where each agent keeps its sessions](https://github.com/mkhuda/agent-ps/blob/main/docs/internals.md), how busy and idle are
 decided per agent, which processes count as background helpers, how a shim is
 told apart from a real session, and what the DISK column is adding up.
 
@@ -358,8 +365,8 @@ same bytes, so the committed executable can be checked against the tree.
 ```
 
 Adding an agent takes one class and one line in the registry. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/mkhuda/agent-ps/blob/main/CONTRIBUTING.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/mkhuda/agent-ps/blob/main/LICENSE).
