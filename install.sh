@@ -8,8 +8,15 @@
 set -eu
 
 REPO="${AGENT_PS_REPO:-mkhuda/agent-ps}"
-REF="${AGENT_PS_REF:-main}"
-URL="${AGENT_PS_URL:-https://raw.githubusercontent.com/$REPO/$REF/agent-ps}"
+# A release is a deliberate act; the default branch is whatever was pushed last.
+# Set AGENT_PS_REF to a tag to pin a version.
+REF="${AGENT_PS_REF:-latest}"
+if [ "$REF" = "latest" ]; then
+  BASE="https://github.com/$REPO/releases/latest/download"
+else
+  BASE="https://github.com/$REPO/releases/download/$REF"
+fi
+URL="${AGENT_PS_URL:-$BASE/agent-ps}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 TARGET="$BIN_DIR/agent-ps"
 
@@ -41,7 +48,22 @@ else
     echo "Could not download $URL" >&2
     exit 1
   fi
-  if [ -n "${AGENT_PS_URL:-}" ]; then SOURCE="$URL"; else SOURCE="$REPO@$REF"; fi
+  if [ -n "${AGENT_PS_URL:-}" ]; then SOURCE="$URL"; else SOURCE="$REPO $REF"; fi
+
+  # Every release publishes the checksum of its executable, so when one is
+  # there it is worth a second of work to find out that the download arrived
+  # intact and unaltered.
+  if [ -z "${AGENT_PS_URL:-}" ] && command -v shasum >/dev/null 2>&1; then
+    if curl -fsSL "$BASE/SHA256SUMS" -o "$STAGE/SHA256SUMS" 2>/dev/null; then
+      WANT=$(cut -d" " -f1 "$STAGE/SHA256SUMS")
+      GOT=$(shasum -a 256 "$STAGE/agent-ps" | cut -d" " -f1)
+      if [ "$WANT" != "$GOT" ]; then
+        echo "Checksum mismatch: expected $WANT, got $GOT" >&2
+        exit 1
+      fi
+      SOURCE="$SOURCE, checksum verified"
+    fi
+  fi
 fi
 
 # A 404 page is valid text and would install happily, so check it runs first.

@@ -28,8 +28,9 @@ One file, no dependencies, reads local files only.
 curl -fsSL https://raw.githubusercontent.com/mkhuda/agent-ps/main/install.sh | sh
 ```
 
-That drops a single file into `~/.local/bin`, checks it runs before keeping it,
-and tells you how to remove it again. Set `BIN_DIR` to put it elsewhere.
+That takes the latest release, checks it against the checksum published with it,
+makes sure it runs, and drops the single file into `~/.local/bin`. Set `BIN_DIR`
+to put it elsewhere, or `AGENT_PS_REF=v0.1.0` to pin a version.
 
 If you would rather not pipe a script into a shell, the executable is the whole
 program and you can fetch it yourself:
@@ -37,9 +38,12 @@ program and you can fetch it yourself:
 ```bash
 mkdir -p ~/.local/bin
 curl -fsSL -o ~/.local/bin/agent-ps \
-  https://raw.githubusercontent.com/mkhuda/agent-ps/main/agent-ps
+  https://github.com/mkhuda/agent-ps/releases/latest/download/agent-ps
 chmod +x ~/.local/bin/agent-ps
 ```
+
+Every [release](https://github.com/mkhuda/agent-ps/releases) publishes a
+`SHA256SUMS` beside the executable.
 
 From a clone, `./install.sh` builds from the tree instead of downloading, so you
 install what you are looking at.
