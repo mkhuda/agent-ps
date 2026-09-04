@@ -18,6 +18,7 @@ else
 fi
 URL="${AGENT_PS_URL:-$BASE/agent-ps}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
+REPLACING=""
 TARGET="$BIN_DIR/agent-ps"
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -74,22 +75,26 @@ if ! VERSION=$("$STAGE/agent-ps" --version 2>/dev/null); then
 fi
 
 if [ -e "$TARGET" ] && ! cmp -s "$STAGE/agent-ps" "$TARGET"; then
-  if [ -t 0 ]; then
-    printf 'agent-ps already exists in %s. Overwrite? [y/N] ' "$BIN_DIR"
+  # Re-running the installer is how people upgrade, so replacing an older
+  # agent-ps is the expected outcome and not worth a question. Anything else
+  # wearing the name is another matter, and a pipe cannot ask.
+  if OLD=$("$TARGET" --version 2>/dev/null) && [ "${OLD% *}" = "agent-ps" ]; then
+    REPLACING=" over $OLD"
+  elif [ -t 0 ]; then
+    printf '%s exists and is not agent-ps. Overwrite? [y/N] ' "$TARGET"
     read -r reply
     case "$reply" in
       [yY]) ;;
       *) echo "Left the existing file in place."; exit 0 ;;
     esac
   else
-    echo "agent-ps already exists in $BIN_DIR. Re-run with BIN_DIR set, or" >&2
-    echo "remove it first." >&2
+    echo "$TARGET exists and is not agent-ps. Remove it, or set BIN_DIR." >&2
     exit 1
   fi
 fi
 
 install -m 755 "$STAGE/agent-ps" "$TARGET"
-echo "Installed $VERSION to $TARGET, from $SOURCE"
+echo "Installed $VERSION to $TARGET${REPLACING:-}, from $SOURCE"
 echo "Remove it with: rm $TARGET"
 
 case ":$PATH:" in
