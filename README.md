@@ -37,13 +37,18 @@ install elsewhere, or `AGENT_PS_REF=v0.1.0` to pin a version.
 ### With a package runner
 
 ```bash
+uvx agent-ps                  # uv
+pipx install agent-ps         # pipx
+pip install agent-ps          # pip
+
 npx @mkhuda/agent-ps          # npm
 pnpm dlx @mkhuda/agent-ps     # pnpm
 bunx @mkhuda/agent-ps         # bun
 ```
 
-The package carries the same executable and finds an interpreter for it. The
-command it installs is `agent-ps`, without the scope.
+The Python packages install the program itself. The npm one carries the same
+executable and finds an interpreter for it, which is why it is scoped: the plain
+name is too close to an existing package. Either way the command is `agent-ps`.
 
 ### Just the file
 

@@ -63,3 +63,9 @@ jobs:
           EOF
       - name: The npm shim runs the zipapp
         run: node npm/agent-ps.js --version
+      - name: The wheel builds and its command works
+        run: |
+          python -m pip install --quiet build
+          python -m build --wheel --outdir dist
+          python -m pip install --quiet dist/*.whl
+          agent-ps --version

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-ps"
+description = "A process table for coding agent sessions. Claude Code, Codex, OpenCode, Hermes, Pi, CommandCode and Copilot in one view, with models, idle time, disk use and one key to stop them."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "mkhuda" }]
+requires-python = ">=3.8"
+keywords = [
+    "cli",
+    "tui",
+    "curses",
+    "process-monitor",
+    "developer-tools",
+    "claude-code",
+    "codex",
+    "opencode",
+    "copilot",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console :: Curses",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: System :: Monitoring",
+    "Topic :: Utilities",
+]
+# There are none, and the whole design depends on there being none.
+dependencies = []
+# Read from the package, so this is one fewer place a version can go stale.
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/mkhuda/agent-ps"
+Changelog = "https://github.com/mkhuda/agent-ps/blob/main/CHANGELOG.md"
+Issues = "https://github.com/mkhuda/agent-ps/issues"
+
+[project.scripts]
+agent-ps = "agent_ps.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "agent_ps.VERSION" }
+
+[tool.setuptools]
+packages = ["agent_ps", "agent_ps.backends"]
