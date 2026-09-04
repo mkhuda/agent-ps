@@ -103,7 +103,14 @@ something.
 | `r` | refresh now |
 | `q` | quit |
 
+Those keys live at the bottom of the screen, under a line naming every agent on
+screen in its own colour and, on the right, what the table is sorted by:
+
 ![The bottom of the screen: a legend naming each agent in its own colour, the sort shown in words on the right, and the key bar beneath it](images/agent-ps-footer-screenshot.jpg)
+
+That middle line does three jobs. It is the key to the colours in the AGENT
+column, it says the sort order in words so the marked heading is never a guess,
+and it is where a note appears for a few seconds after you act on something.
 
 Backspacing a filter down to nothing leaves filter mode, so the key bar comes
 back without reaching for escape.
