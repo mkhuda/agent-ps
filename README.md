@@ -22,6 +22,42 @@ helper, or the lot.
 
 One file, no dependencies, reads local files only.
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mkhuda/agent-ps/main/install.sh | sh
+```
+
+That drops a single file into `~/.local/bin`, checks it runs before keeping it,
+and tells you how to remove it again. Set `BIN_DIR` to put it elsewhere.
+
+If you would rather not pipe a script into a shell, the executable is the whole
+program and you can fetch it yourself:
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL -o ~/.local/bin/agent-ps \
+  https://raw.githubusercontent.com/mkhuda/agent-ps/main/agent-ps
+chmod +x ~/.local/bin/agent-ps
+```
+
+From a clone, `./install.sh` builds from the tree instead of downloading, so you
+install what you are looking at.
+
+Requires Python 3.8 or later and nothing from PyPI. Tested on 3.8, 3.9, 3.10 and
+3.14. macOS and Linux; Windows is out because `curses` is not in its standard
+library. It shells out to `ps`, and on macOS to `lsof`, which is how a process is
+matched to a session everywhere except Claude Code.
+
+To remove it:
+
+```bash
+rm -f ~/.local/bin/agent-ps
+```
+
+Nothing is written outside that directory. agent-ps only ever reads the agents'
+own files.
+
 ## Agents
 
 Each agent keeps its own colour in the table, and the same colours label the
@@ -47,32 +83,6 @@ host, so it has no process of its own: no PID, no uptime, no CPU or memory, and
 nothing to stop. What it does have is the credits each turn spent, which the free
 tier meters and nothing else surfaces. A chat counts as open while its workspace
 is open in the editor.
-
-## Install
-
-```bash
-mkdir -p ~/.local/bin
-curl -fsSL -o ~/.local/bin/agent-ps \
-  https://raw.githubusercontent.com/mkhuda/agent-ps/main/agent-ps
-chmod +x ~/.local/bin/agent-ps
-```
-
-Or clone and run `./install.sh`, which builds from the tree and honours `BIN_DIR`
-if you want it somewhere else.
-
-Requires Python 3.8 or later and nothing from PyPI. Tested on 3.8, 3.9, 3.10 and 3.14. macOS and Linux; Windows is
-out because `curses` is not in its standard library. It shells out to `ps`, and
-on macOS to `lsof`, which is how a process is matched to a session everywhere
-except Claude Code.
-
-To remove it:
-
-```bash
-rm -f ~/.local/bin/agent-ps
-```
-
-Nothing is written outside that directory. agent-ps only ever reads the agents'
-own files.
 
 ## Usage
 
