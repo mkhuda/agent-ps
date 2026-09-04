@@ -1,6 +1,6 @@
 {
   "name": "@mkhuda/agent-ps",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A process table for coding agent sessions. Claude Code, Codex, OpenCode, Hermes, Pi, CommandCode and Copilot in one view, with models, idle time, disk use and one key to stop them.",
   "keywords": [
     "cli",

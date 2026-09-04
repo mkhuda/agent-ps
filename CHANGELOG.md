@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+The detail panel earns its screen.
+
+- It is grouped now, in the order the questions arrive: what the session is,
+  what it is doing to the machine, what it has cost, and the command line last.
+  The agent name takes its colour from the table, a busy status is green, and an
+  inferred pairing reads as a warning rather than another grey line.
+- The disk total is broken down. A hundred megabytes of transcript and a hundred
+  of file history call for different answers, and the column alone could not
+  tell you which you had. Every backend names its own parts, including the two
+  that keep sessions in a database and count rows rather than files.
+- The panel keeps up. It redrew on every pass and so looked live, but it held
+  the row it was opened with, which left cpu, memory, uptime and the time since
+  the last turn frozen at the moment it appeared.
+
 ## 0.2.0
 
 Ways to install it, and a release that publishes itself.

@@ -203,32 +203,31 @@ ended sessions, then `s` until DISK is marked.
 
 ### The detail panel
 
-Enter on a live session opens everything known about it, including tokens and
-cost where the agent counts them:
+Enter on a live session opens everything known about it, grouped in the order
+the questions arrive: what the session is, what it is doing to the machine, what
+it has cost, and the command line last, since it is long and rarely the
+question.
+
+<img src="https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-detail.jpg" width="620"
+     alt="The detail panel for a Claude Code session, in four groups. Session: agent, id, status, model, title and directory. Process: pid with its parent, uptime, and time since the last turn. Usage: cpu, memory, and a 41M disk total broken into 28M of transcript, 11M of subagent logs and 2M of file history. Command: the command line that started it.">
+
+The disk total is broken down, because the number on its own is not something
+you can act on. Forty megabytes of transcript and forty of file history call for
+different answers, and until you can see which it is there is nothing to decide.
+
+Where the agent counts tokens, they are here too. Hermes and OpenCode report
+cost, Copilot reports the credits a turn spent:
 
 ```
- session details
-
-       agent  hermes
-     session  20260905_005254_2c9f4d
-      status  idle
-       model  nemotron-3.5-lightning-free
-   directory  /Users/rg/projects/agent-ps
-       title  halo are you hermes?
-         pid  21098  (parent 17518)
-      uptime  1h17m   last turn 1h15m ago
-       usage  cpu 0.0%   memory 11M   disk 121K
-      paired  matched by working directory, not reported
     provider  opencode-free
       tokens  in 24,608  out 242  reasoning 190
        calls  2 api, 6 messages, 0 tool calls
         cost  $0.0000 estimated
-     command  /usr/bin/python3 /Users/rg/.hermes/hermes-agent/hermes
 ```
 
-The `paired` line appears only when the pairing was inferred. The provider,
-tokens, calls and cost lines appear only for agents that record them, and are
-simply absent for the rest.
+A `paired` line appears when the session was matched to the process by working
+directory rather than reported, so you know before pressing `k` that the pairing
+is a guess.
 
 Enter on an ended session reopens it in a new terminal tab instead. Copilot
 chats live in the editor, so they have no reopen command and say so.
@@ -361,7 +360,7 @@ install fetches. The build is reproducible: the same source always produces the
 same bytes, so the committed executable can be checked against the tree.
 
 ```
-dc69b7aa0700cced3e82775b8cbba2b388ff1c2135d12c3f43d41c33580f1223  agent-ps
+d5f2e2bd6d35e148e461c60c7cb7bd80fce272a15efb462a7dd513955ef5a2b6  agent-ps
 ```
 
 Adding an agent takes one class and one line in the registry. See
