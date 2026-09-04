@@ -24,16 +24,31 @@ One file, no dependencies, reads local files only.
 
 ## Install
 
+### One command
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mkhuda/agent-ps/main/install.sh | sh
 ```
 
-That takes the latest release, checks it against the checksum published with it,
-makes sure it runs, and drops the single file into `~/.local/bin`. Set `BIN_DIR`
-to put it elsewhere, or `AGENT_PS_REF=v0.1.0` to pin a version.
+Takes the latest release, checks it against the checksum published beside it,
+makes sure it runs, and puts the single file in `~/.local/bin`. Set `BIN_DIR` to
+install elsewhere, or `AGENT_PS_REF=v0.1.0` to pin a version.
+
+### With a package runner
+
+```bash
+npx @mkhuda/agent-ps          # npm
+pnpm dlx @mkhuda/agent-ps     # pnpm
+bunx @mkhuda/agent-ps         # bun
+```
+
+The package carries the same executable and finds an interpreter for it. The
+command it installs is `agent-ps`, without the scope.
+
+### Just the file
 
 If you would rather not pipe a script into a shell, the executable is the whole
-program and you can fetch it yourself:
+program:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -43,34 +58,31 @@ chmod +x ~/.local/bin/agent-ps
 ```
 
 Every [release](https://github.com/mkhuda/agent-ps/releases) publishes a
-`SHA256SUMS` beside the executable.
+`SHA256SUMS` next to it.
 
-If you install your coding agents with npm:
+### From a clone
 
 ```bash
-npx @mkhuda/agent-ps
+git clone https://github.com/mkhuda/agent-ps && cd agent-ps
+./install.sh
 ```
 
-It is the same Python program either way; the package only carries the
-executable and finds an interpreter for it. The command it installs is still
-`agent-ps`.
+Builds from the tree rather than downloading, so you install what you are
+looking at.
 
-From a clone, `./install.sh` builds from the tree instead of downloading, so you
-install what you are looking at.
+### What it needs, and how to remove it
 
-Requires Python 3.8 or later and nothing from PyPI. Tested on 3.8, 3.9, 3.10 and
-3.14. macOS and Linux; Windows is out because `curses` is not in its standard
-library. It shells out to `ps`, and on macOS to `lsof`, which is how a process is
-matched to a session everywhere except Claude Code.
-
-To remove it:
+Python 3.8 or later and nothing from PyPI. Tested on 3.8, 3.9, 3.10 and 3.14.
+macOS and Linux; Windows is out because `curses` is not in its standard library.
+It shells out to `ps`, and on macOS to `lsof`, which is how a process is matched
+to a session everywhere except Claude Code.
 
 ```bash
 rm -f ~/.local/bin/agent-ps
 ```
 
-Nothing is written outside that directory. agent-ps only ever reads the agents'
-own files.
+That is the whole uninstall. Nothing is written outside that directory, and
+agent-ps only ever reads the agents' own files.
 
 ## Agents
 
