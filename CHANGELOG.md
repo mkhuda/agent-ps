@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0
+
+Ways to install it, and a release that publishes itself.
+
+- `curl | sh` takes the latest release, checks it against the checksum
+  published beside it, and makes sure it runs before keeping it.
+- On PyPI as `agent-ps`, so `uvx agent-ps`, `pipx install agent-ps` and
+  `pip install agent-ps` all work.
+- On npm as `@mkhuda/agent-ps`, scoped because the plain name is too close to
+  an existing package. The command it installs is still `agent-ps`.
+- Releases are built and published from the tag on a clean runner, which
+  refuses to start when the tag, the version in the package and this file
+  disagree.
+
+The tool itself is unchanged.
+
 ## 0.1.0
 
 First public release.
