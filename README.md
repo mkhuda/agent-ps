@@ -45,6 +45,9 @@ chmod +x ~/.local/bin/agent-ps
 Every [release](https://github.com/mkhuda/agent-ps/releases) publishes a
 `SHA256SUMS` beside the executable.
 
+If you install your coding agents with npm, `npx agent-ps` works too. It is the
+same Python program either way; the package only finds an interpreter.
+
 From a clone, `./install.sh` builds from the tree instead of downloading, so you
 install what you are looking at.
 

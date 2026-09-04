@@ -1,0 +1,42 @@
+{
+  "name": "agent-ps",
+  "version": "0.1.0",
+  "description": "A process table for coding agent sessions. Claude Code, Codex, OpenCode, Hermes, Pi, CommandCode and Copilot in one view, with models, idle time, disk use and one key to stop them.",
+  "keywords": [
+    "cli",
+    "tui",
+    "process-monitor",
+    "developer-tools",
+    "claude-code",
+    "codex",
+    "opencode",
+    "copilot",
+    "ai-agents"
+  ],
+  "homepage": "https://github.com/mkhuda/agent-ps#readme",
+  "bugs": "https://github.com/mkhuda/agent-ps/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mkhuda/agent-ps.git"
+  },
+  "license": "MIT",
+  "author": "mkhuda",
+  "bin": {
+    "agent-ps": "npm/agent-ps.js"
+  },
+  "files": [
+    "npm/agent-ps.js",
+    "agent-ps",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=12"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "scripts": {
+    "test": "node npm/agent-ps.js --version"
+  }
+}

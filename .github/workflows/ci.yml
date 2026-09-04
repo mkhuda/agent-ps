@@ -47,3 +47,19 @@ jobs:
       - name: Checksum in the README is current
         run: |
           grep -qF "$(sha256sum agent-ps | cut -d' ' -f1)" README.md
+      # three files carry the version and they are edited by hand, so the only
+      # question is when they drift, not whether
+      - name: Versions agree
+        run: |
+          python - <<'EOF'
+          import json, re, sys
+          pkg = json.load(open("package.json"))["version"]
+          src = re.search(r'VERSION = "([^"]+)"', open("agent_ps/__init__.py").read())[1]
+          if pkg != src:
+              sys.exit(f"package.json says {pkg}, agent_ps says {src}")
+          if f"## {src}" not in open("CHANGELOG.md").read():
+              sys.exit(f"CHANGELOG.md has no entry for {src}")
+          print(f"all three say {src}")
+          EOF
+      - name: The npm shim runs the zipapp
+        run: node npm/agent-ps.js --version
