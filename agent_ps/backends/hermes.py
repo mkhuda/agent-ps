@@ -90,11 +90,17 @@ class HermesBackend(SqliteBackend):
         Hermes writes a full request dump per turn, and those are two orders of
         magnitude larger than the messages they record.
         """
+        return sum(size for _, size in self.disk_breakdown(session_id, ""))
+
+    def disk_breakdown(self, session_id, path):
         found = self.query("SELECT total(length(content)) + total(length(tool_calls)) "
                            "FROM messages WHERE session_id = ?", (session_id,))
-        total = int(found[0][0] or 0) if found else 0
         dumps = os.path.join(self.root, "sessions", f"request_dump_{session_id}_*.json")
-        return total + sum(directory_size(p) for p in glob.glob(dumps))
+        parts = [
+            ("conversation", int(found[0][0] or 0) if found else 0),
+            ("request dumps", sum(directory_size(p) for p in glob.glob(dumps))),
+        ]
+        return sorted([p for p in parts if p[1]], key=lambda p: -p[1])
 
     def details(self, row):
         found = self.query(

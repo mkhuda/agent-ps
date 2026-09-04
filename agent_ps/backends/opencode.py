@@ -80,11 +80,21 @@ class OpenCodeBackend(SqliteBackend):
 
     def _session_bytes(self, session_id):
         """What one session holds in the database, rather than on its own."""
-        found = self.query(
-            "SELECT (SELECT total(length(data)) FROM message WHERE session_id = ?)"
-            " + (SELECT total(length(data)) FROM part WHERE session_id = ?)",
-            (session_id, session_id))
-        return int(found[0][0] or 0) if found else 0
+        return sum(size for _, size in self.disk_breakdown(session_id, ""))
+
+    def disk_breakdown(self, session_id, path):
+        if not self.database:
+            return super().disk_breakdown(session_id, path)
+        parts = []
+        for label, table in (("messages", "message"), ("parts", "part")):
+            found = self.query(
+                f"SELECT total(length(data)) FROM {table} WHERE session_id = ?",
+                (session_id,))
+            size = int(found[0][0] or 0) if found else 0
+            if size:
+                parts.append((label, size))
+        parts.sort(key=lambda p: -p[1])
+        return parts
 
     def details(self, row):
         if not self.database:

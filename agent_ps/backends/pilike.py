@@ -71,6 +71,10 @@ class PiLikeBackend(Backend):
         return ""
 
 
+    def disk_paths(self, session_id, path):
+        return [("transcript", path)]
+
+
 class PiBackend(PiLikeBackend):
     name = "pi"
     root = os.path.expanduser("~/.pi/agent")
@@ -102,7 +106,7 @@ class CommandCodeBackend(PiLikeBackend):
 
     def disk_paths(self, session_id, path):
         base = os.path.dirname(path)
-        return [path,
-                os.path.join(base, f"{session_id}.checkpoints.jsonl"),
-                os.path.join(base, f"{session_id}.meta.json"),
-                os.path.join(self.root, "file-history", session_id)]
+        return [("transcript", path),
+                ("checkpoints", os.path.join(base, f"{session_id}.checkpoints.jsonl")),
+                ("metadata", os.path.join(base, f"{session_id}.meta.json")),
+                ("file history", os.path.join(self.root, "file-history", session_id))]

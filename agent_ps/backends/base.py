@@ -254,23 +254,37 @@ class Backend:
     # Disk ----------------------------------------------------------------
 
     def disk_paths(self, session_id, path):
-        """Everything on disk that belongs to one session.
+        """Everything on disk that belongs to one session, with a name for each.
 
-        Entries may contain a `*`, since some agents name files after the
-        session and then append a timestamp.
+        Named rather than bare, because the total is not the interesting part:
+        a session can be a hundred megabytes and the answer to what to do about
+        it depends entirely on which of these it is. Entries may contain a `*`,
+        since some agents name files after the session and append a timestamp.
         """
-        return [path]
+        return [("log", path)]
+
+    def disk_breakdown(self, session_id, path):
+        """What the disk total is made of, largest first.
+
+        Backends that keep sessions in a database override this, since their
+        bytes are rows rather than files.
+        """
+        parts = []
+        for label, entry in self.disk_paths(session_id, path):
+            if "*" in entry:
+                size = sum(directory_size(p) for p in glob.glob(entry))
+            else:
+                size = directory_size(entry)
+            if size:
+                parts.append((label, size))
+        parts.sort(key=lambda p: -p[1])
+        return parts
 
     def disk_usage(self, session_id, path):
         now = time.time()
         if now - self._disk_at.get(session_id, 0) < DISK_POLL_SECONDS:
             return self._disk.get(session_id, 0)
-        total = 0
-        for entry in self.disk_paths(session_id, path):
-            if "*" in entry:
-                total += sum(directory_size(p) for p in glob.glob(entry))
-            else:
-                total += directory_size(entry)
+        total = sum(size for _, size in self.disk_breakdown(session_id, path))
         self._disk[session_id] = total
         self._disk_at[session_id] = now
         return total

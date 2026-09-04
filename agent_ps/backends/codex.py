@@ -23,9 +23,11 @@ class CodexBackend(Backend):
     def disk_paths(self, session_id, path):
         # the shell snapshot is routinely larger than the transcript it belongs
         # to, and it is named after the session with a timestamp appended
-        return [path,
-                os.path.join(self.root, "shell_snapshots", f"{session_id}.*.sh"),
-                os.path.join(self.root, "thread-writer-locks", f"{session_id}.lock")]
+        return [("transcript", path),
+                ("shell snapshot",
+                 os.path.join(self.root, "shell_snapshots", f"{session_id}.*.sh")),
+                ("writer lock",
+                 os.path.join(self.root, "thread-writer-locks", f"{session_id}.lock"))]
 
     def extract(self, reader):
         info = {}

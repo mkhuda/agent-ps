@@ -137,8 +137,8 @@ class ClaudeBackend(Backend):
 
     def disk_paths(self, session_id, path):
         base = os.path.dirname(path)
-        return [path,
-                os.path.join(base, session_id),
-                os.path.join(self.root, "file-history", session_id),
-                os.path.join(self.root, "tasks", session_id),
-                os.path.join(self.root, "session-env", session_id)]
+        return [("transcript", path),
+                ("subagents", os.path.join(base, session_id)),
+                ("file history", os.path.join(self.root, "file-history", session_id)),
+                ("tasks", os.path.join(self.root, "tasks", session_id)),
+                ("session env", os.path.join(self.root, "session-env", session_id))]

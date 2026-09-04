@@ -128,7 +128,9 @@ class CopilotBackend(Backend):
 
     def disk_paths(self, session_id, path):
         base = os.path.dirname(os.path.dirname(path))
-        return [path, os.path.join(base, "chatEditingSessions", session_id)]
+        return [("chat journal", path),
+                ("editing session",
+                 os.path.join(base, "chatEditingSessions", session_id))]
 
     def history_bytes(self):
         return sum(directory_size(p) for p in

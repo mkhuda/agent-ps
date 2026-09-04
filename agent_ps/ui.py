@@ -346,45 +346,86 @@ class Tui:
         self.screen.addnstr(2, start, text, min(cell, width - 1 - start),
                             curses.color_pair(self.C_SORT) | curses.A_BOLD)
 
+    def detail_groups(self, row, backend):
+        """Everything known about one session, in the order it gets asked.
+
+        What it is, then what it is doing to the machine, then what it cost,
+        then the command line, which is long and rarely the question.
+        """
+        session = [
+            ("agent", agent_label(row), self.agent_colour.get(row["agent"], 0)),
+            ("session", row["session_id"] or "not matched to a session", 0),
+            ("status", status_label(row),
+             curses.color_pair(self.C_BUSY) if row["status"] == STATUS_BUSY else 0),
+            ("model", row["model"] or "-", 0),
+            ("title", row["title"] or "-", 0),
+            ("directory", row["cwd"] or "-", 0),
+        ]
+
+        process = []
+        if row["pid"]:
+            process.append(("pid", f"{row['pid']}  (parent {row['ppid']})", 0))
+            process.append(("uptime", human_duration(row["uptime"]), 0))
+        process.append(("last turn", idle_label(row), 0))
+        if row["attach"] == ATTACH_INFERRED:
+            process.append(("paired", "matched by working directory, not reported",
+                            curses.color_pair(self.C_WARNING)))
+
+        usage = []
+        if row["pid"]:
+            usage.append(("cpu", f"{row['cpu']:.1f}%", 0))
+            usage.append(("memory", human_bytes(row["rss"], unit_kb=True), 0))
+        if row.get("disk"):
+            usage.append(("disk", human_bytes(row["disk"]), 0))
+            # the total is rarely the useful part: a hundred megabytes of
+            # transcript and a hundred of snapshots call for different answers
+            if backend and row["session_id"]:
+                for label, size in backend.disk_breakdown(row["session_id"],
+                                                          row.get("path", "")):
+                    usage.append(("", f"{human_bytes(size):>7}  {label}", 0))
+        if backend and row["session_id"]:
+            usage.extend((label, value, 0) for label, value in backend.details(row))
+
+        groups = [("session", session), ("process", process), ("usage", usage)]
+        if row["cmd"]:
+            groups.append(("command", [("", row["cmd"], 0)]))
+        return groups
+
     def draw_detail(self, height, width):
-        """Everything known about one session, on one screen."""
         row = self.detail
         backend = self.snapshot.find_backend(row["agent"])
-        lines = [
-            ("agent", agent_label(row)),
-            ("session", row["session_id"] or "not matched to a session"),
-            ("status", status_label(row)),
-            ("model", row["model"] or "-"),
-            ("directory", row["cwd"] or "-"),
-            ("title", row["title"] or "-"),
-            ("pid", f"{row['pid']}  (parent {row['ppid']})"),
-            ("uptime", f"{human_duration(row['uptime'])}   last turn {idle_label(row)}"),
-            ("usage", f"cpu {row['cpu']:.1f}%   memory "
-                      f"{human_bytes(row['rss'], unit_kb=True)}   disk "
-                      f"{human_bytes(row['disk']) if row['disk'] else '-'}"),
-        ]
-        if row["attach"] == ATTACH_INFERRED:
-            lines.append(("paired", "matched by working directory, not reported"))
-        if backend and row["session_id"]:
-            lines.extend(backend.details(row))
-        lines.append(("command", row["cmd"] or "-"))
 
         self.screen.attron(curses.color_pair(self.C_HEADER))
         self.screen.addnstr(2, 0, " session details".ljust(width - 1), width - 1)
         self.screen.attroff(curses.color_pair(self.C_HEADER))
 
         screen_row = 4
-        for label, value in lines:
-            if screen_row >= height - 2:
-                break
-            self.screen.addnstr(screen_row, 2, f"{label:>10}", 10, curses.A_DIM)
-            # the command line is the one field that runs long, so it wraps
-            # instead of being cut off where it stops being useful
-            for chunk in _wrap(str(value), max(10, width - 16)):
+        for heading, entries in self.detail_groups(row, backend):
+            if not entries or screen_row >= height - 3:
+                continue
+            self.screen.addnstr(screen_row, 2, heading.upper(), 12,
+                                curses.A_BOLD | curses.A_DIM)
+            screen_row += 1
+            for label, value, attr in entries:
                 if screen_row >= height - 2:
                     break
-                self.screen.addnstr(screen_row, 14, chunk, width - 15)
-                screen_row += 1
+                if label:
+                    self.screen.addnstr(screen_row, 4, f"{label:>11}", 11,
+                                        curses.A_DIM)
+                # the command line is the one field that runs long, so it wraps
+                # instead of being cut off where it stops being useful
+                room = max(10, width - 20)
+                text = str(value)
+                # wrapping rebuilds the string from its words, so a value that
+                # already fits is printed untouched and keeps its alignment
+                chunks = [text] if len(text) <= room else _wrap(text, room)
+                for chunk in chunks:
+                    if screen_row >= height - 2:
+                        break
+                    self.screen.addnstr(screen_row, 17, chunk, width - 18, attr)
+                    screen_row += 1
+            screen_row += 1
+
         keys = " enter or esc close"
         if row["pid"]:
             keys += "   k stop this process"
