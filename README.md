@@ -5,6 +5,7 @@ what a session was.
 
 [![ci](https://img.shields.io/github/actions/workflow/status/mkhuda/agent-ps/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/mkhuda/agent-ps/actions/workflows/ci.yml)
 [![pypi](https://img.shields.io/pypi/v/agent-ps?style=flat-square&color=blue)](https://pypi.org/project/agent-ps/)
+[![npm](https://img.shields.io/npm/v/%40mkhuda%2Fagent-ps?style=flat-square&color=blue&label=npm)](https://www.npmjs.com/package/@mkhuda/agent-ps)
 [![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![python](https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square)
 ![agents](https://img.shields.io/badge/agents-7-orange?style=flat-square)
