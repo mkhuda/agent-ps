@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  compile:
+    name: python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile every module
+        run: python -m compileall -q agent_ps
+      - name: Run against a home with no agents
+        env:
+          HOME: ${{ runner.temp }}/empty-home
+        run: |
+          mkdir -p "$HOME"
+          python -m agent_ps agents
+          python -m agent_ps list
+
+  artifact:
+    name: committed executable matches the source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # the build is reproducible, so rebuilding an unchanged tree must produce
+      # the file that is already committed. This is what stops the executable
+      # people curl from drifting away from the code they can read.
+      - name: Rebuild and compare
+        run: |
+          sha256sum agent-ps > committed.txt
+          ./build.sh
+          sha256sum -c committed.txt
+      - name: Checksum in the README is current
+        run: |
+          grep -qF "$(sha256sum agent-ps | cut -d' ' -f1)" README.md

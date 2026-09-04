@@ -1,0 +1,48 @@
+# Local state left by the coding agents this repo is written to watch. They all
+# run in here during development, and their local config records approved
+# commands and absolute paths.
+.claude/settings.local.json
+.claude/sessions/
+.codex/
+.opencode/
+.hermes/
+.pi/
+.commandcode/
+.mcp.json
+.aider*
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.tox/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Merge and backup leftovers
+*.orig
+*.rej
+*.backup-*
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# Node, only ever here by accident
+node_modules/
