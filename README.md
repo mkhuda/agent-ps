@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/mkhuda/agent-ps/main/install.sh | s
 `ps aux | grep claude` gives you PIDs. It will not tell you which one is the
 session you are talking to, what model it is spending on, whether it has been
 idle for three days, or which rows are background daemons that outlived the
-terminal that started them. It also misses the other six agents entirely.
+terminal that started them. It also misses the other seven agents entirely.
 
 agent-ps lists every session with its agent, model, working directory, uptime,
 idle time and disk footprint, then stops one process tree, every background
@@ -68,8 +68,7 @@ pnpm dlx @mkhuda/agent-ps
 bunx @mkhuda/agent-ps
 ```
 
-The npm package is scoped because the plain name is too close to an existing
-one. Either way the command it gives you is `agent-ps`.
+Either way the command it gives you is `agent-ps`.
 
 ### Just the file
 
@@ -98,7 +97,7 @@ looking at.
 
 ### What it needs, and how to remove it
 
-Python 3.8 or later and nothing from PyPI. Tested on 3.8, 3.9, 3.10 and 3.14.
+Python 3.8 or later and nothing from PyPI. Tested on 3.8, 3.9, 3.12 and 3.13.
 macOS and Linux; Windows is out because `curses` is not in its standard library.
 It shells out to `ps`, and on macOS to `lsof`, which is how a process is matched
 to a session everywhere except Claude Code.
@@ -115,31 +114,23 @@ agent-ps only ever reads the agents' own files.
 Each agent keeps its own colour in the table, and the same colours label the
 legend above the keys.
 
-| Agent | | Sessions in | Paired by | Tokens | Reopened with |
-|---|---|---|---|---|---|
-| [Claude Code](https://claude.com/claude-code) | ![yellow](https://img.shields.io/badge/-d4a72c?style=flat-square) | JSONL | the agent itself | no | `claude --resume` |
-| [Pi](https://pi.dev) | ![cyan](https://img.shields.io/badge/-00a3a3?style=flat-square) | JSONL | directory | no | `pi --session` |
-| CommandCode | ![magenta](https://img.shields.io/badge/-b83fb8?style=flat-square) | JSONL | directory | no | `cmd --resume` |
-| [Codex CLI](https://github.com/openai/codex) | ![green](https://img.shields.io/badge/-3f9e3f?style=flat-square) | JSONL | directory | no | `codex resume` |
-| [OpenCode](https://github.com/sst/opencode) | ![blue](https://img.shields.io/badge/-3b6fd4?style=flat-square) | SQLite | directory | yes | `opencode --session` |
-| Hermes | ![red](https://img.shields.io/badge/-c0392b?style=flat-square) | SQLite | directory | yes | `hermes --resume` |
-| GitHub Copilot | ![white](https://img.shields.io/badge/-cfd3d8?style=flat-square) | VS Code storage | no process | yes | in the editor |
-| Antigravity | ![blue](https://img.shields.io/badge/-5f87ff?style=flat-square) | SQLite per conversation | directory | no | `agy --conversation` |
+| Agent | | Sessions in | Paired by | Reopened with |
+|---|---|---|---|---|
+| [Claude Code](https://claude.com/claude-code) | ![yellow](https://img.shields.io/badge/-d4a72c?style=flat-square) | JSONL | the agent itself | `claude --resume` |
+| [Pi](https://pi.dev) | ![cyan](https://img.shields.io/badge/-00a3a3?style=flat-square) | JSONL | directory | `pi --session` |
+| CommandCode | ![magenta](https://img.shields.io/badge/-b83fb8?style=flat-square) | JSONL | directory | `cmd --resume` |
+| [Codex CLI](https://github.com/openai/codex) | ![green](https://img.shields.io/badge/-3f9e3f?style=flat-square) | JSONL | directory | `codex resume` |
+| [OpenCode](https://github.com/sst/opencode) | ![blue](https://img.shields.io/badge/-3b6fd4?style=flat-square) | SQLite | directory | `opencode --session` |
+| Hermes | ![red](https://img.shields.io/badge/-c0392b?style=flat-square) | SQLite | directory | `hermes --resume` |
+| GitHub Copilot | ![white](https://img.shields.io/badge/-cfd3d8?style=flat-square) | VS Code storage | no process | in the editor |
+| Antigravity | ![blue](https://img.shields.io/badge/-5f87ff?style=flat-square) | SQLite per conversation | directory | `agy --conversation` |
 
-Only Claude Code records which process is running which session, so every other
-pairing is matched on working directory and shown as a guess. OpenCode, Hermes
-and Copilot count tokens and cost, which the detail panel shows. Agents you have
-not installed are skipped, not reported as missing.
+Only Claude Code records which process is running which session. Every other
+pairing is matched on working directory and shown as a guess. Tokens and cost
+appear in the detail panel.
 
-Antigravity keeps each conversation in its own database, but the fields worth
-showing are inside protobuf blobs rather than columns, so they are read out one
-at a time. Its steps carry the same status whether a turn is running or has
-finished, so it is the one agent whose busy and idle cannot be told apart.
-
-Copilot is the exception to everything. It runs inside the VS Code extension
-host, so it has no process of its own: no PID, no uptime, no CPU or memory, and
-nothing to stop. What it does have is the credits each turn spent, which the free
-tier meters and nothing else surfaces. A chat counts as open while its workspace
+Copilot is the exception: it runs inside the VS Code extension host, so it has no
+process of its own and nothing to stop. A chat counts as open while its workspace
 is open in the editor.
 
 ## Usage
@@ -176,9 +167,8 @@ screen in its own colour and, on the right, what the table is sorted by:
 
 ![The bottom of the screen: a legend naming all eight agents, each in its own colour, the sort order spelled out on the right, and the key bar beneath it](https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-footer-screenshot.jpg)
 
-That middle line does three jobs. It is the key to the colours in the AGENT
-column, it says the sort order in words so the marked heading is never a guess,
-and it is where a note appears for a few seconds after you act on something.
+That middle line is the key to the colours, names the sort order in words, and
+is where a note appears for a few seconds after you act on something.
 
 Backspacing a filter down to nothing leaves filter mode, so the key bar comes
 back without reaching for escape.
@@ -209,20 +199,17 @@ ended sessions, then `s` until DISK is marked.
 
 ### The detail panel
 
-Enter on a live session opens everything known about it, grouped in the order
-the questions arrive: what the session is, what it is doing to the machine, what
-it has cost, and the command line last, since it is long and rarely the
-question.
+Enter on a live session opens everything known about it, in four groups: what
+the session is, what it is doing to the machine, what it has cost, and the
+command line.
 
 <img src="https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-detail.jpg" width="620"
      alt="The detail panel for a Claude Code session, in four groups. Session: agent, id, status, model, title and directory. Process: pid with its parent, uptime, and time since the last turn. Usage: cpu, memory, and a 41M disk total broken into 28M of transcript, 11M of subagent logs and 2M of file history. Command: the command line that started it.">
 
-The disk total is broken down, because the number on its own is not something
-you can act on. Forty megabytes of transcript and forty of file history call for
-different answers, and until you can see which it is there is nothing to decide.
+The disk total is broken down by what is holding it, since transcript and file
+history call for different answers.
 
-Where the agent counts tokens, they are here too. Hermes and OpenCode report
-cost, Copilot reports the credits a turn spent:
+Tokens and cost are here too, and Copilot reports the credits a turn spent:
 
 ```
     provider  opencode-free
@@ -236,14 +223,13 @@ directory rather than reported, so you know before pressing `k` that the pairing
 is a guess.
 
 Enter on an ended session reopens it in a new terminal tab instead. Copilot
-chats live in the editor, so they have no reopen command and say so.
+chats reopen in the editor.
 
 ### The advisory line
 
 A line above the keys points out whatever is worth a look: background helpers
 left running, sessions untouched for a day, or ended sessions you could resume.
-It names the key that acts on it, and only ever shows one thing, since a wall of
-warnings teaches people to ignore the line.
+It names the key that acts on it, and shows one thing at a time.
 
 ## Scripting
 
@@ -281,18 +267,14 @@ the table and exits.
 | CPU, MEM | the same `ps` call |
 | DISK | everything that session left on disk |
 | DIR | the working directory |
-| TITLE | the session title, or its opening prompt where the agent keeps none |
+| TITLE | the session title, or its opening prompt |
 
-UPTIME and ACTIVE often disagree, and that is the point. A process can be five
-days old and have answered a minute ago. UPTIME comes from the process table,
-ACTIVE from the modification time of the log, which is appended on every turn,
-so an ended session shows a dash under UPTIME and only ACTIVE says how stale it
-is.
+UPTIME and ACTIVE often disagree: a process can be five days old and have
+answered a minute ago. UPTIME comes from the process table, ACTIVE from the log,
+which is appended on every turn.
 
-Each agent gets its own colour in the AGENT column, assigned in registry order,
-and the same colours appear in the legend, which makes that line the key to the
-palette. A selected row keeps its own highlight rather than being broken up, so
-the cursor stays unmistakable. Terminals without colour fall back to plain text.
+Each agent has its own colour, and the legend above the keys is the key to it.
+Terminals without colour fall back to plain text.
 
 ## A PID marked with a question mark
 

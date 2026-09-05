@@ -26,6 +26,14 @@ OpenCode versions before the migration wrote a tree of JSON files under
 `storage/` instead, and that is read when the database is absent, so an install
 that never migrated still works.
 
+## Antigravity keeps its fields in protobuf
+
+Each conversation is its own SQLite file, but the workspace, the opening request
+and the model sit inside protobuf blobs rather than columns, so each is read out
+by hand. The model comes from the small metadata blob rather than the large one,
+which also holds whatever the session was reading and will hand back another
+agent's name if asked.
+
 ## How busy and idle are decided
 
 Whether a session is mid-turn is answered differently by each agent, and two of
@@ -39,7 +47,7 @@ them answer it outright:
 | OpenCode | the newest message, which carries a `finish` reason once its turn is over |
 | Hermes | the newest message, which carries a finish reason the same way |
 | GitHub Copilot | the last turn's `modelState`, which records when it completed |
-| Antigravity | nothing does. Its steps carry the same status whether a turn is running or finished, so the column stays a dash |
+| Antigravity | its steps do not distinguish a running turn, so the column stays a dash |
 
 The inferred ones can get stuck. A turn keeps appending as it works, so a
 session that still looks busy after fifteen minutes of silence is reported idle
