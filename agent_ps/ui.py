@@ -30,6 +30,12 @@ AGENT_COLOURS = (
     curses.COLOR_WHITE,
 )
 
+#: A basic terminal has only seven usable colours, and the eighth agent would
+#: have worn the first one's. A terminal offering 256 has room for more without
+#: disturbing the first seven, which people have already learned. The first of
+#: these is the blue Antigravity is branded in, since it lands on that slot.
+EXTRA_COLOURS = (69, 208, 141, 84, 173, 205)
+
 
 def agent_label(row):
     """Agent name, with the sort of process appended when it is not a session."""
@@ -100,6 +106,14 @@ COLUMNS = [
     ("DIR", 24, lambda r: short_path(r.get("cwd", ""), 23)),
     ("TITLE", 0, lambda r: r["title"] or "-"),
 ]
+
+
+def _agent_colour(index):
+    if index < len(AGENT_COLOURS):
+        return AGENT_COLOURS[index]
+    if curses.COLORS >= 256:
+        return EXTRA_COLOURS[(index - len(AGENT_COLOURS)) % len(EXTRA_COLOURS)]
+    return AGENT_COLOURS[index % len(AGENT_COLOURS)]
 
 
 def column_span(label):
@@ -233,7 +247,7 @@ class Tui:
         curses.init_pair(self.C_SORT, curses.COLOR_BLACK, curses.COLOR_CYAN)
         for index, name in enumerate(backends.names()):
             pair = self.C_AGENT_BASE + index
-            curses.init_pair(pair, AGENT_COLOURS[index % len(AGENT_COLOURS)], -1)
+            curses.init_pair(pair, _agent_colour(index), -1)
             self.agent_colour[name] = curses.color_pair(pair)
         self.screen.timeout(200)
 
@@ -551,7 +565,16 @@ class Tui:
         agents = sorted({r["agent"] for r in self.rows})
         if not agents:
             return
-        text = " agents  " + "  ".join(agents)
+        # Positions are recorded while the line is built rather than searched
+        # for afterwards. One agent's name can sit inside another's, and looking
+        # for "pi" in a line that also says "copilot" finds the wrong two
+        # letters and leaves the real one uncoloured.
+        text = " agents  "
+        placed = []
+        for agent in agents:
+            placed.append((len(text), agent))
+            text += agent + "  "
+        text = text.rstrip()
         self.screen.addnstr(screen_row, 0, text, width - 1, curses.A_DIM)
 
         # a long agent list leaves no room for a sentence on an 80 column
@@ -568,9 +591,8 @@ class Tui:
                                     curses.color_pair(self.C_SORT) | curses.A_BOLD)
                 break
 
-        for agent in agents:
-            at = text.find(agent)
-            if at < 0 or at >= width - 1:
+        for at, agent in placed:
+            if at >= width - 1:
                 continue
             self.screen.addnstr(screen_row, at, agent, min(len(agent), width - 1 - at),
                                 self.agent_colour.get(agent, 0) | curses.A_BOLD)

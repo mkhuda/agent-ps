@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0
+
+Antigravity, and a legend that was lying about one of the colours.
+
+- Google's `agy` is the eighth agent. Each conversation is its own SQLite file,
+  but the fields worth showing sit inside protobuf blobs rather than columns, so
+  they are read out one at a time: the workspace by its length prefix, the
+  opening request from its tags, and the model from the small metadata blob
+  rather than the large one, which also holds whatever the session was reading
+  and will happily hand back another agent's name.
+- Its steps carry the same status whether a turn is running or finished, so it
+  is the one agent whose busy and idle cannot be told apart. That column stays a
+  dash rather than guessing at it.
+- The legend coloured the wrong letters. It found each agent by searching the
+  line it had just built, and `copilot` contains `pi`, so two letters in the
+  middle of one name were painted in another's colour while the real `pi` was
+  left with none. Positions are recorded while the line is composed now.
+- An eighth agent had nowhere to go: a basic terminal has seven usable colours
+  and the new one would have worn the first one's. Terminals offering 256 now
+  draw from a wider palette without disturbing the seven already learned.
+
 ## 0.3.0
 
 The detail panel earns its screen.

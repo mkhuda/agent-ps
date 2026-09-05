@@ -4,6 +4,7 @@ Adding an agent means writing one class and adding it to this list. Order sets
 the order rows appear in when nothing else separates them.
 """
 
+from .antigravity import AntigravityBackend
 from .claude import ClaudeBackend
 from .codex import CodexBackend
 from .copilot import CopilotBackend
@@ -12,7 +13,7 @@ from .opencode import OpenCodeBackend
 from .pilike import CommandCodeBackend, PiBackend
 
 ALL = (ClaudeBackend, PiBackend, CommandCodeBackend, CodexBackend,
-       OpenCodeBackend, HermesBackend, CopilotBackend)
+       OpenCodeBackend, HermesBackend, CopilotBackend, AntigravityBackend)
 
 
 def available(only=None):

@@ -1,7 +1,7 @@
 <div align="center">
 
 <img src="https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-screenshot.jpg" width="900"
-     alt="agent-ps listing sessions from claude, hermes, codex, opencode, pi, commandcode and copilot side by side, each with its model, uptime, idle time, cpu, memory, disk and working directory, with two hermes background helpers at the bottom">
+     alt="agent-ps listing eleven sessions across all eight agents at once, each agent named in its own colour, with columns for model, uptime, time since the last turn, cpu, memory and disk. Three antigravity sessions, two hermes background helpers, a copilot chat with no process of its own, and a busy claude session highlighted at the top.">
 
 # agent-ps
 
@@ -13,7 +13,7 @@ what a session was.**
 [![npm](https://img.shields.io/npm/v/%40mkhuda%2Fagent-ps?style=flat-square&color=blue&label=npm)](https://www.npmjs.com/package/@mkhuda/agent-ps)
 [![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/mkhuda/agent-ps/blob/main/LICENSE)
 ![python](https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square)
-![agents](https://img.shields.io/badge/agents-7-orange?style=flat-square)
+![agents](https://img.shields.io/badge/agents-8-orange?style=flat-square)
 ![dependencies](https://img.shields.io/badge/dependencies-none-brightgreen?style=flat-square)
 
 [Install](#install) | [Usage](#usage) | [Agents](#agents) |
@@ -124,11 +124,17 @@ legend above the keys.
 | [OpenCode](https://github.com/sst/opencode) | ![blue](https://img.shields.io/badge/-3b6fd4?style=flat-square) | SQLite | directory | yes | `opencode --session` |
 | Hermes | ![red](https://img.shields.io/badge/-c0392b?style=flat-square) | SQLite | directory | yes | `hermes --resume` |
 | GitHub Copilot | ![white](https://img.shields.io/badge/-cfd3d8?style=flat-square) | VS Code storage | no process | yes | in the editor |
+| Antigravity | ![blue](https://img.shields.io/badge/-5f87ff?style=flat-square) | SQLite per conversation | directory | no | `agy --conversation` |
 
 Only Claude Code records which process is running which session, so every other
 pairing is matched on working directory and shown as a guess. OpenCode, Hermes
 and Copilot count tokens and cost, which the detail panel shows. Agents you have
 not installed are skipped, not reported as missing.
+
+Antigravity keeps each conversation in its own database, but the fields worth
+showing are inside protobuf blobs rather than columns, so they are read out one
+at a time. Its steps carry the same status whether a turn is running or has
+finished, so it is the one agent whose busy and idle cannot be told apart.
 
 Copilot is the exception to everything. It runs inside the VS Code extension
 host, so it has no process of its own: no PID, no uptime, no CPU or memory, and
@@ -168,7 +174,7 @@ something.
 Those keys live at the bottom of the screen, under a line naming every agent on
 screen in its own colour and, on the right, what the table is sorted by:
 
-![The bottom of the screen: a legend naming each agent in its own colour, the sort shown in words on the right, and the key bar beneath it](https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-footer-screenshot.jpg)
+![The bottom of the screen: a legend naming all eight agents, each in its own colour, the sort order spelled out on the right, and the key bar beneath it](https://raw.githubusercontent.com/mkhuda/agent-ps/main/images/agent-ps-footer-screenshot.jpg)
 
 That middle line does three jobs. It is the key to the colours in the AGENT
 column, it says the sort order in words so the marked heading is never a guess,
@@ -360,7 +366,7 @@ install fetches. The build is reproducible: the same source always produces the
 same bytes, so the committed executable can be checked against the tree.
 
 ```
-d5f2e2bd6d35e148e461c60c7cb7bd80fce272a15efb462a7dd513955ef5a2b6  agent-ps
+1a44868de812f5d0d2ac012ec97d610a34bca21884f718c7a8dffae80fb05ee6  agent-ps
 ```
 
 Adding an agent takes one class and one line in the registry. See

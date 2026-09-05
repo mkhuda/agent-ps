@@ -14,6 +14,7 @@ Reference for the parts of the table that are not obvious. The
 | OpenCode | `~/.local/share/opencode/opencode.db` | `OPENCODE_DATA` |
 | Hermes | `~/.hermes/state.db` | `HERMES_HOME` |
 | GitHub Copilot | `~/Library/Application Support/Code/User/workspaceStorage/` | `VSCODE_USER_DIR` |
+| Antigravity | `~/.gemini/antigravity-cli/conversations/` | `ANTIGRAVITY_HOME` |
 
 `agent-ps agents` prints which of these exist on your machine and how many
 sessions each holds.
@@ -38,6 +39,7 @@ them answer it outright:
 | OpenCode | the newest message, which carries a `finish` reason once its turn is over |
 | Hermes | the newest message, which carries a finish reason the same way |
 | GitHub Copilot | the last turn's `modelState`, which records when it completed |
+| Antigravity | nothing does. Its steps carry the same status whether a turn is running or finished, so the column stays a dash |
 
 The inferred ones can get stuck. A turn keeps appending as it works, so a
 session that still looks busy after fifteen minutes of silence is reported idle
@@ -94,6 +96,7 @@ DISK column adds up everything one session left behind:
 | OpenCode | its messages and parts in the database |
 | Hermes | its messages in the database, and one request dump per turn |
 | GitHub Copilot | the chat journal and its editing session |
+| Antigravity | the conversation database |
 
 The last few are worth knowing about. A Codex shell snapshot runs to a few
 hundred kilobytes and is routinely larger than the transcript it belongs to, and

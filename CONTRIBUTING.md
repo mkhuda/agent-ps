@@ -23,6 +23,7 @@ agent_ps/
     opencode.py    SQLite, with the old JSON tree as a fallback
     hermes.py      SQLite, and a gateway that outlives its sessions
     copilot.py     no process at all, and a journal that must be replayed
+    antigravity.py protobuf blobs inside a database, read field by field
 ```
 
 Most agents keep one JSONL log per session, so that is the default. A backend
