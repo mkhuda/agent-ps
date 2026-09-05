@@ -26,6 +26,12 @@ OpenCode versions before the migration wrote a tree of JSON files under
 `storage/` instead, and that is read when the database is absent, so an install
 that never migrated still works.
 
+Old Claude Code releases are said to have kept their logs one level deeper, at
+`projects/<project>/sessions/<session>.jsonl`, which the path above would not
+find. No install seen so far has that layout, so nothing reads it. It is written
+down here because a report of old sessions missing from the table is the symptom
+it would produce.
+
 ## Antigravity keeps its fields in protobuf
 
 Each conversation is its own SQLite file, but the workspace, the opening request

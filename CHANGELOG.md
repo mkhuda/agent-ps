@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+The token counts four agents were already writing.
 
 - Token counts for Claude Code, Codex, Pi and CommandCode, which all record
   what a turn spent and were simply never read. Seven of the eight agents now
