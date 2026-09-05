@@ -20,6 +20,10 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Compile every module
         run: python -m compileall -q agent_ps
+      # the session formats are nobody's public interface, so these are what
+      # notice when an agent quietly changes one
+      - name: Every backend against the store its agent would write
+        run: python -m unittest discover -s tests -v
       - name: Run against a home with no agents
         env:
           HOME: ${{ runner.temp }}/empty-home

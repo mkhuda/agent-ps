@@ -18,6 +18,10 @@ class PiLikeBackend(Backend):
     #: Fields on a model_change entry, joined with a slash when there are two.
     model_fields = ("model",)
 
+    # a turn writes one or the other and never both, so the two cannot
+    # double up on each other
+    usage_at = (("message", "usage"), ("usage",))
+
     def extract(self, reader):
         info = {"cwd": reader.find_head("cwd")}
         for line in reader.tail():
@@ -85,6 +89,9 @@ class PiBackend(PiLikeBackend):
     # accepts an id
     resume_flag = "--session"
     model_fields = ("provider", "modelId")
+    usage_keys = {"input": "input", "output": "output",
+                  "reasoning": "reasoning", "cache_read": "cacheRead",
+                  "cache_write": "cacheWrite", "cost": "cost"}
 
     def session_id(self, path):
         # named <timestamp>_<uuid>.jsonl, and only the second half identifies it
@@ -99,6 +106,9 @@ class CommandCodeBackend(PiLikeBackend):
     process_patterns = ("cmd", "commandcode")
     resume_binary = "cmd"
     extra_dirs = ("file-history",)
+    usage_keys = {"input": "inputTokens", "output": "outputTokens",
+                  "cache_read": "cacheReadTokens",
+                  "cache_write": "cacheWriteTokens", "cost": "costUsd"}
 
     def session_paths(self):
         # checkpoint files sit beside the logs and share the session id

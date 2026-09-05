@@ -66,6 +66,13 @@ def cmd_list(args):
           f"{history['ended']} session{'' if history['ended'] == 1 else 's'} "
           f"on record, "
           f"{human_bytes(max(0, history['bytes'] - disk))} in history.")
+    if FAILURES:
+        # the ended sessions still read fine, so the table is not empty and the
+        # earlier check never fires. Saying "0 running" without this would be a
+        # confident wrong answer, which is the failure this tool exists to avoid
+        print(f"Could not run {', '.join(sorted(FAILURES))}, so running sessions "
+              f"may be missing.", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -18,6 +18,12 @@ class CodexBackend(Backend):
     process_patterns = ("codex",)
     resume_binary = "codex"
     resume_flag = "resume"
+
+    usage_at = (("payload", "info", "total_token_usage"),)
+    usage_cumulative = True
+    usage_keys = {"input": "input_tokens", "output": "output_tokens",
+                  "reasoning": "reasoning_output_tokens",
+                  "cache_read": "cached_input_tokens"}
     extra_dirs = ("shell_snapshots", "thread-writer-locks")
 
     def disk_paths(self, session_id, path):

@@ -33,6 +33,26 @@ ATTACH_INFERRED = "cwd"
 
 TITLE_LENGTH = 60
 
+#: Shared, because the totals belong to the file rather than to the backend
+#: that happens to be asking.
+TALLY = jsonl.Tally()
+
+
+def usage_lines(totals):
+    """Token counts as panel lines, leaving out whatever the agent never wrote."""
+    lines = []
+    for label, fields in (
+            ("tokens", (("in", "input"), ("out", "output"),
+                        ("reasoning", "reasoning"))),
+            ("cache", (("read", "cache_read"), ("write", "cache_write")))):
+        parts = [f"{shown} {totals[name]:,}"
+                 for shown, name in fields if totals.get(name)]
+        if parts:
+            lines.append((label, "  ".join(parts)))
+    if totals.get("cost"):
+        lines.append(("cost", f"${totals['cost']:.4f}"))
+    return lines
+
 
 def prompt_title(text):
     """An opening prompt, trimmed to serve as a title.
@@ -88,6 +108,20 @@ class Backend:
     #: turn keeps appending as it works, so silence for this long means the turn
     #: ended without a final entry, or the agent stopped.
     busy_timeout = 900
+
+    #: Where a turn records what it spent, as paths into one log entry, tried in
+    #: order until one is found. Agents move this between releases and some
+    #: write it in two places, which is why it is a list rather than one path.
+    usage_at = ()
+
+    #: Our field names against the agent's own. Only what is listed is shown, so
+    #: an agent that counts something nobody else does simply does not name it.
+    usage_keys = {}
+
+    #: Set where the agent writes a running total each turn rather than that
+    #: turn's own numbers, in which case the newest entry is the answer and
+    #: adding them up would count every turn as many times as it has successors.
+    usage_cumulative = False
 
     def __init__(self):
         self.cache = jsonl.Cache()
@@ -310,13 +344,54 @@ class Backend:
         roots += [os.path.join(self.root, d) for d in self.extra_dirs]
         return sum(directory_size(r) for r in roots)
 
+    def token_totals(self, path):
+        """What one session has spent, as our field names.
+
+        Only reached from the detail panel. This is the one thing here that
+        reads a whole log rather than an end of it, so it is never on the path
+        the table refreshes.
+        """
+        if not (self.usage_at and path):
+            return {}
+        if self.usage_cumulative:
+            raw = self._last_usage(path)
+        else:
+            raw = TALLY.totals(path, self._usage_of)
+        return {ours: raw[theirs] for ours, theirs in self.usage_keys.items()
+                if raw.get(theirs)}
+
+    def _usage_of(self, entry):
+        """The usage object in one entry, from the first place it is found."""
+        for where in self.usage_at:
+            value = entry
+            for key in where:
+                value = value.get(key) if isinstance(value, dict) else None
+            if isinstance(value, dict):
+                return value
+        return None
+
+    def _last_usage(self, path):
+        """The newest count, for agents that write a running total each turn.
+
+        Nothing has to be added up in that case, so the tail is enough.
+        """
+        marker = self.usage_at[0][-1]
+        for line in jsonl.Reader(path).tail():
+            if marker not in line:
+                continue
+            entry = jsonl.parse_line(line)
+            usage = self._usage_of(entry) if entry is not None else None
+            if usage:
+                return usage
+        return {}
+
     def details(self, row):
         """Extra facts about one session, as label and value pairs.
 
-        Some agents count tokens and cost and some do not, so this is optional
-        and the panel simply shows fewer lines where there is less to say.
+        A backend that says where its agent writes token counts gets these for
+        free; one that keeps them somewhere other than a log overrides this.
         """
-        return []
+        return usage_lines(self.token_totals(row.get("path", "")))
 
     # Resume --------------------------------------------------------------
 

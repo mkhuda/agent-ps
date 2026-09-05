@@ -90,6 +90,39 @@ process is dropped when one of its direct children carries an identical command
 line, which tells a shim apart from a supervisor: a daemon spawns helpers with
 different arguments, so it and its workers are both kept.
 
+## Where the token counts come from
+
+Every agent but one records what a turn spent, in its own place and under its
+own names:
+
+| Agent | Written at | Shape |
+|---|---|---|
+| Claude Code | `message.usage` | per turn |
+| Pi | `message.usage`, or `usage` at the root | per turn |
+| CommandCode | `usage`, with the cost in dollars | per turn |
+| Codex CLI | `payload.info.total_token_usage` | a running total |
+| OpenCode, Hermes | columns in the database | per session |
+| GitHub Copilot | the chat journal, as credits | per turn |
+| Antigravity | inside the protobuf blobs | not read |
+
+The shape column is what decides how it is read. A running total already holds
+the answer, so the newest one wins and adding them up would count each turn once
+for every turn that followed it. Per turn counts have to be summed, and that
+means the whole log rather than an end of it.
+
+So this is the one thing here that reads a file from beginning to end, and it
+happens only for the session whose detail panel is open, never while the table
+refreshes. A long transcript reaches a hundred megabytes, which takes about half
+a second. That is paid once: logs are only ever appended to, so a session that
+grew is its previous total plus whatever arrived after the last read, and a busy
+session costs the few kilobytes it just wrote rather than all of it again. A log
+that shrank or changed without growing was replaced, and is counted afresh.
+
+Claude Code also writes a count inside tool results, which belongs to a subagent
+that tool ran rather than to the turn holding it. It is left out, since it is
+spend of its own and would otherwise land on whichever session happened to
+launch it.
+
 ## Disk usage
 
 A session writes more than its log, and the log is often the smaller half. The

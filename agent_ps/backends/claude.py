@@ -24,6 +24,13 @@ class ClaudeBackend(Backend):
     root = os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude"))
     session_glob = "projects/*/*.jsonl"
     process_patterns = ("claude",)
+
+    # the assistant's own turns only. A tool result carries a nested count for
+    # the subagent it ran, which is spend of its own rather than this turn's.
+    usage_at = (("message", "usage"),)
+    usage_keys = {"input": "input_tokens", "output": "output_tokens",
+                  "cache_read": "cache_read_input_tokens",
+                  "cache_write": "cache_creation_input_tokens"}
     resume_binary = "claude"
     extra_dirs = ("file-history", "tasks", "session-env")
 

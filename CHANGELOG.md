@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Token counts for Claude Code, Codex, Pi and CommandCode, which all record
+  what a turn spent and were simply never read. Seven of the eight agents now
+  report what a session cost.
+- The counts are summed over a whole log, which is the one thing here that
+  reads a file end to end, so it happens only for the session whose detail
+  panel is open. Logs are append only, so a session that grew costs the bytes
+  it just wrote rather than all of it again.
+- `agent-ps list` now says when `ps` or `lsof` failed even where the table came
+  back with rows, rather than only when it came back empty.
+- The tests run in CI, across every supported interpreter.
+
 ## 0.4.0
 
 Antigravity, and a legend that was lying about one of the colours.
