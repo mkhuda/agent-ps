@@ -18,8 +18,8 @@ Reclaiming what ended sessions leave behind.
   above the keys reports the total when there is one.
 - One confirmation path now serves every destructive key, rather than each
   growing its own.
-- Release pages take their title and notes from this file instead of the commit
-  list.
+- Release pages take their title and notes from the changelog instead of the
+  commit list.
 
 ## 0.5.0
 
