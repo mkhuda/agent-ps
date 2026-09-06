@@ -142,6 +142,12 @@ class ClaudeBackend(Backend):
                 "model": row["model"], "last_active": row["last_active"],
                 "disk": row["disk"]}
 
+    # everything a session leaves behind except the conversation. Subagent
+    # transcripts belong to a Task that has already finished and cannot be
+    # opened on their own, and file history backs /rewind, which is a question
+    # only a session still being worked on can ask.
+    prunable = ("subagents", "file history", "tasks", "session env")
+
     def disk_paths(self, session_id, path):
         base = os.path.dirname(path)
         return [("transcript", path),

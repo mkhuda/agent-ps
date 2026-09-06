@@ -150,6 +150,30 @@ hundred kilobytes and is routinely larger than the transcript it belongs to, and
 Hermes writes a full request dump on every turn, which came to 121 KB for a six
 message conversation whose text was 399 bytes.
 
+### What can be removed, and what never is
+
+A session leaves more behind than it needs to keep. `agent-ps prune` removes
+the parts that are not the conversation, which each backend names for itself:
+
+| Agent | Removable | Kept |
+|---|---|---|
+| Claude Code | subagent transcripts, file history, tasks, session env | transcript |
+| CommandCode | checkpoints, file history | transcript, metadata |
+| Codex CLI | shell snapshot | transcript, writer lock |
+| Hermes | request dumps | the conversation, which is rows |
+| Pi | nothing, it writes only a transcript | transcript |
+| OpenCode, Copilot, Antigravity | nothing | everything |
+
+The last row is the rule that shapes the feature. Their sessions are rows in a
+database the agent may have open, so removing one means writing to it, and
+reading everything read only is worth more than a cleaner. A backend that names
+nothing is never even walked.
+
+A session with a running process is never touched, whatever its age. What it
+left is still in use: for Claude Code the file history is what `/rewind`
+reaches for. The writer lock is left for the same reason, being how Codex knows
+whether something else holds the session.
+
 The header shows both the total for live sessions and everything on disk, and the
 gap between them is usually large. Logs outlive the process that wrote them, so a
 machine with a few hundred megabytes of live sessions can be holding several

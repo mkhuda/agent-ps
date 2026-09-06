@@ -22,14 +22,19 @@ class Snapshot:
 
     def __init__(self, backends):
         self.backends = backends
-        self._history = {"bytes": 0, "ended": 0, "recent": 0}
+        self._history = {"bytes": 0, "ended": 0, "recent": 0, "spare": 0,
+                         "spare_sessions": 0}
         self._history_at = 0.0
+        #: Sessions seen with a process on the last pass, so the reclaimable
+        #: total can leave out what prune would refuse to touch.
+        self._alive = set()
 
     def rows(self, show_ended=False, limit=40):
         table = proc_table.table()
         taken = set()
         running = []
         ended = []
+        alive = set()
 
         for backend in self.backends:
             mine = proc_table.drop_shims(
@@ -46,14 +51,19 @@ class Snapshot:
             running.extend(attached)
             running.extend(hosted)
 
+            live = {r["session_id"] for r in attached + hosted if r["session_id"]}
+            # remembered even when ended rows are not asked for, because the
+            # reclaimable total has to leave out whatever prune will refuse
+            alive.update((backend.name, sid) for sid in live)
+
             if show_ended:
-                live = {r["session_id"] for r in attached + hosted if r["session_id"]}
                 for session in recent:
                     if session["session_id"] in live:
                         continue
                     session["kind"] = KIND_ENDED
                     ended.append(session)
 
+        self._alive = alive
         ended.sort(key=lambda r: r["last_active"], reverse=True)
         return running + ended[:limit]
 
@@ -73,9 +83,34 @@ class Snapshot:
             count, fresh = backend.history_counts(week_ago)
             ended += count
             recent += fresh
-        self._history = {"bytes": total, "ended": ended, "recent": recent}
+        spare, spare_sessions = self.reclaimable(week_ago)
+        self._history = {"bytes": total, "ended": ended, "recent": recent,
+                         "spare": spare, "spare_sessions": spare_sessions}
         self._history_at = now
         return self._history
+
+    def reclaimable(self, before):
+        """What ended sessions are holding that is not their conversation.
+
+        Per session rather than per directory, because the age and whether a
+        process is running are session facts. That costs a tenth of a second
+        against the four hundredths the rest of this takes, which is why it
+        rides the slow poll rather than the refresh.
+        """
+        total = sessions = 0
+        for backend in self.backends:
+            if not backend.prunable:
+                continue
+            for row in backend.sessions():
+                if not row["session_id"] or row["last_active"] > before:
+                    continue
+                if (backend.name, row["session_id"]) in self._alive:
+                    continue  # prune leaves a running session alone
+                parts = backend.prune_paths(row["session_id"], row.get("path", ""))
+                if parts:
+                    sessions += 1
+                    total += sum(size for _, _, size in parts)
+        return total, sessions
 
     def find_backend(self, name):
         return next((b for b in self.backends if b.name == name), None)

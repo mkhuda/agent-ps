@@ -106,6 +106,8 @@ class CommandCodeBackend(PiLikeBackend):
     process_patterns = ("cmd", "commandcode")
     resume_binary = "cmd"
     extra_dirs = ("file-history",)
+    # metadata stays: it is what names the session, and it is tiny
+    prunable = ("checkpoints", "file history")
     usage_keys = {"input": "inputTokens", "output": "outputTokens",
                   "cache_read": "cacheReadTokens",
                   "cache_write": "cacheWriteTokens", "cost": "costUsd"}

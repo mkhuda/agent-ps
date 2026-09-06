@@ -3,7 +3,10 @@
 import argparse
 import curses
 import json
+import os
+import shutil
 import sys
+import time
 
 from . import VERSION, backends
 from .collect import Snapshot, idle_seconds, is_live
@@ -129,6 +132,97 @@ def cmd_stop_background(args):
     return 0 if len(stopped) == len(targets) else 1
 
 
+def parse_age(text):
+    """`7d`, `36h`, or plain days. Returns seconds."""
+    text = (text or "").strip().lower()
+    unit = {"d": 86400, "h": 3600, "w": 604800}.get(text[-1:], 0)
+    number = text[:-1] if unit else text
+    try:
+        value = float(number)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{text!r} is not an age. Use 7d, 36h or 2w.")
+    if value < 0:
+        raise argparse.ArgumentTypeError("an age cannot be negative")
+    return value * (unit or 86400)
+
+
+def prunable_rows(snapshot, older_than):
+    """Ended sessions past the age, with what of theirs can go.
+
+    A session with a process is never a candidate, whatever its age. That is
+    the same rule `stop` follows from the other direction, and it is what keeps
+    file history from being taken out from under a session still able to rewind.
+    """
+    cutoff = time.time() - older_than
+    found = []
+    for row in snapshot.rows(show_ended=True, limit=100000):
+        if is_live(row) or not row["session_id"]:
+            continue
+        if row["last_active"] and row["last_active"] > cutoff:
+            continue
+        backend = snapshot.find_backend(row["agent"])
+        parts = backend.prune_paths(row["session_id"], row.get("path", "")) \
+            if backend else []
+        if parts:
+            found.append((row, parts))
+    found.sort(key=lambda pair: -sum(part[2] for part in pair[1]))
+    return found
+
+
+def cmd_prune(args):
+    snapshot = build(args)
+    older_than = parse_age(args.older_than)
+    found = prunable_rows(snapshot, older_than)
+    if not found:
+        print(f"Nothing to remove from sessions ended more than "
+              f"{args.older_than} ago.")
+        return 0
+
+    by_label = {}
+    for _, parts in found:
+        for label, _, size in parts:
+            count, total = by_label.get(label, (0, 0))
+            by_label[label] = (count + 1, total + size)
+    total = sum(size for _, _, size in
+                (part for _, parts in found for part in parts))
+
+    print(f"Ended more than {args.older_than} ago, sessions with a process "
+          f"skipped.\n")
+    print(f"  {len(found)} sessions, {human_bytes(total)} in parts that are "
+          f"not the conversation\n")
+    for label, (count, size) in sorted(by_label.items(), key=lambda p: -p[1][1]):
+        print(f"    {human_bytes(size):>8}  {label:<14} {count} sessions")
+    print("\n  largest:")
+    for row, parts in found[:5]:
+        days = (time.time() - row["last_active"]) / 86400 if row["last_active"] else 0
+        name = row["title"] or row["name"] or row["session_id"]
+        print(f"    {human_bytes(sum(p[2] for p in parts)):>8}  "
+              f"{name[:38]:<38} {days:5.1f}d  {row['agent']}")
+
+    if not args.apply:
+        print("\n  Transcripts are untouched. Pass --apply to remove.")
+        return 0
+
+    removed = failed = 0
+    freed = 0
+    for row, parts in found:
+        for _, entry, size in parts:
+            try:
+                if os.path.isdir(entry):
+                    shutil.rmtree(entry)
+                else:
+                    os.remove(entry)
+                removed += 1
+                freed += size
+            except OSError as error:
+                print(f"  ! {entry}: {error}", file=sys.stderr)
+                failed += 1
+    print(f"\nRemoved {removed} item(s), {human_bytes(freed)} freed."
+          + (f" {failed} could not be removed." if failed else ""))
+    return 1 if failed else 0
+
+
 def cmd_agents(args):
     for cls in backends.ALL:
         backend = cls()
@@ -172,6 +266,14 @@ def main():
     p_bg = sub.add_parser("stop-background", help="stop daemons and warm spares")
     p_bg.add_argument("--dry-run", action="store_true")
     p_bg.set_defaults(func=cmd_stop_background)
+
+    p_prune = sub.add_parser(
+        "prune", help="remove what an ended session left that is not the conversation")
+    p_prune.add_argument("--older-than", default="7d", metavar="AGE",
+                         help="only sessions idle this long (default 7d)")
+    p_prune.add_argument("--apply", action="store_true",
+                         help="actually remove; without this it only reports")
+    p_prune.set_defaults(func=cmd_prune)
 
     p_agents = sub.add_parser("agents", help="show which agents were found")
     p_agents.set_defaults(func=cmd_agents)

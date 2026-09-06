@@ -5,6 +5,8 @@ shape, so a column is one lookup and never a branch.
 """
 
 import curses
+import os
+import shutil
 import time
 
 from . import backends
@@ -221,7 +223,10 @@ class Tui:
         self.show_ended = False
         self.filter_text = ""
         self.editing_filter = False
-        self.pending_kill = None
+        # a question waiting for y or n, as (what is being asked, what to do).
+        # Carrying the action means one confirmation path serves every
+        # destructive key rather than each growing its own.
+        self.pending = None
         self.detail = None
         self.sort = 0
         self.descending = True
@@ -305,7 +310,7 @@ class Tui:
         self.screen.erase()
         height, width = self.screen.getmaxyx()
         self.draw_summary(width)
-        if self.detail and not self.pending_kill:
+        if self.detail and not self.pending:
             self.draw_detail(height, width)
             self.screen.noutrefresh()
             curses.doupdate()
@@ -416,9 +421,14 @@ class Tui:
             # the total is rarely the useful part: a hundred megabytes of
             # transcript and a hundred of snapshots call for different answers
             if backend and row["session_id"]:
+                spare = () if is_live(row) else backend.prunable
                 for label, size in backend.disk_breakdown(row["session_id"],
                                                           row.get("path", "")):
-                    usage.append(("", f"{human_bytes(size):>7}  {label}", 0))
+                    # marked only on an ended session, since prune leaves a
+                    # running one alone however much it is holding
+                    mark = "  can be pruned" if label in spare else ""
+                    usage.append(("", f"{human_bytes(size):>7}  {label}{mark}",
+                                  curses.A_DIM if mark else 0))
         if backend and row["session_id"]:
             usage.extend((label, value, 0) for label, value in backend.details(row))
 
@@ -529,6 +539,13 @@ class Tui:
         recent = self.history["recent"]
         if recent and not self.show_ended:
             return f"{recent} session(s) ended in the past week, press e to show them"
+
+        # last, because unlike the others this is a standing condition rather
+        # than something that just happened
+        spare = self.history["spare"]
+        if spare:
+            return (f"{human_bytes(spare)} reclaimable in ended sessions, "
+                    f"run agent-ps prune")
         return ""
 
     def draw_footer(self, height, width):
@@ -537,9 +554,8 @@ class Tui:
             self.screen.addnstr(height - 1, 0, prompt.ljust(width - 1), width - 1,
                                 curses.color_pair(self.C_SELECTED))
             return
-        if self.pending_kill:
-            _, order, note = self.pending_kill
-            text = f" Stop {len(order)} process(es){note}?  [y] confirm  [n] cancel"
+        if self.pending:
+            text = f" {self.pending[0]}  [y] confirm  [n] cancel"
             self.screen.addnstr(height - 1, 0, text.ljust(width - 1), width - 1,
                                 curses.color_pair(self.C_WARNING))
             return
@@ -551,7 +567,7 @@ class Tui:
         else:
             self.draw_legend(height - 2, width)
         mode = "hide ended" if self.show_ended else "show ended"
-        keys = (" up/down select   enter details   k stop   b background"
+        keys = (" up/down   enter details   k stop   b background   p prune"
                 f"   e {mode}   s sort   S reverse   / filter   q quit")
         self.screen.addnstr(height - 1, 0, keys.ljust(width - 1), width - 1,
                             curses.color_pair(self.C_HEADER))
@@ -608,7 +624,55 @@ class Tui:
         note = f" in {short_path(row['cwd'], 40)}" if row["cwd"] else ""
         if row["attach"] == ATTACH_INFERRED:
             note += ", session matched by directory"
-        self.pending_kill = (row["pid"], order, note)
+        self.pending = (f"Stop {len(order)} process(es){note}?",
+                        lambda: self.apply_kill(order))
+
+    def confirm_prune(self, row):
+        """Ask before removing what an ended session left behind.
+
+        Refuses a session that is still running, and says why rather than
+        going quiet. What a session leaves behind is still in use while its
+        process is alive: for Claude Code the file history is what /rewind
+        reaches for, and no age threshold makes that safe.
+        """
+        name = row["title"] or row["name"] or row["session_id"] or "that session"
+        if is_live(row):
+            self.notify("That session is still running. Prune only "
+                        "touches ended sessions.")
+            return
+        if not row["session_id"]:
+            self.notify("No session id for that row.")
+            return
+        backend = self.snapshot.find_backend(row["agent"])
+        parts = backend.prune_paths(row["session_id"], row.get("path", "")) \
+            if backend else []
+        if not parts:
+            self.notify("Nothing to prune. Transcripts are never removed.")
+            return
+        total = sum(size for _, _, size in parts)
+        labels = sorted({label for label, _, _ in parts})
+        self.pending = (
+            f"Remove {human_bytes(total)} of {', '.join(labels)} from "
+            f"{short_path(name, 24)}? The transcript is kept.",
+            lambda: self.apply_prune(row, parts))
+
+    def apply_prune(self, row, parts):
+        self.detail = None
+        freed = failed = 0
+        for _, entry, size in parts:
+            try:
+                if os.path.isdir(entry):
+                    shutil.rmtree(entry)
+                else:
+                    os.remove(entry)
+                freed += size
+            except OSError:
+                failed += 1
+        note = f"Freed {human_bytes(freed)}."
+        self.notify(note if not failed else f"{note} {failed} could not be removed.")
+        # the sizes on screen are now wrong, and the reclaimable total with them
+        self.snapshot.history(force=True)
+        self.poll()
 
     def open_selected(self):
         """Enter does the obvious thing for the row it is on.
@@ -637,9 +701,7 @@ class Tui:
         ok, note = open_in_terminal(command)
         self.notify(note if ok else f"{note} Run: {command}")
 
-    def apply_kill(self):
-        _, order, _ = self.pending_kill
-        self.pending_kill = None
+    def apply_kill(self, order):
         self.detail = None
         stopped = [p for p in order if terminate(p)]
         self.notify(f"Stopped {len(stopped)} of {len(order)} processes.")
@@ -655,18 +717,22 @@ class Tui:
                    ord("j"), ord("K")):
             self.message = ""
 
-        if self.detail and not self.pending_kill:
+        if self.detail and not self.pending:
             if key == ord("k") and self.detail["pid"]:
                 self.confirm_kill(self.detail)
+            elif key == ord("p"):
+                self.confirm_prune(self.detail)
             elif key in (10, 13, curses.KEY_ENTER, 27, ord("q")):
                 self.detail = None
             return True
 
-        if self.pending_kill:
+        if self.pending:
             if key in (ord("y"), ord("Y")):
-                self.apply_kill()
+                action = self.pending[1]
+                self.pending = None
+                action()
             elif key in (ord("n"), ord("N"), 27):
-                self.pending_kill = None
+                self.pending = None
                 self.notify("Cancelled.")
             return True
 
@@ -711,10 +777,15 @@ class Tui:
                 self.notify(f"{row['agent']} has no process of its own to stop.")
             elif row:
                 self.notify("That session has already ended.")
+        elif key == ord("p"):
+            row = self.selected()
+            if row:
+                self.confirm_prune(row)
         elif key in (ord("b"), ord("B")):
             background = [r["pid"] for r in self.rows if r["background"]]
             if background:
-                self.pending_kill = (background[0], background, "")
+                self.pending = (f"Stop {len(background)} background process(es)?",
+                                lambda: self.apply_kill(background))
             else:
                 self.notify("No background processes.")
         return True
@@ -750,6 +821,6 @@ class Tui:
             key = self.screen.getch()
             if key != -1 and not self.handle(key):
                 break
-            if not self.paused and not self.pending_kill:
+            if not self.paused and not self.pending:
                 if time.time() - self.last_poll >= REFRESH_SECONDS:
                     self.poll()

@@ -19,6 +19,10 @@ class CodexBackend(Backend):
     resume_binary = "codex"
     resume_flag = "resume"
 
+    # the writer lock is left alone: it is bytes, but it is also how codex
+    # knows whether something else is holding the session
+    prunable = ("shell snapshot",)
+
     usage_at = (("payload", "info", "total_token_usage"),)
     usage_cumulative = True
     usage_keys = {"input": "input_tokens", "output": "output_tokens",

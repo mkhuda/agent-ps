@@ -154,6 +154,7 @@ something.
 | `S` | reverse the direction |
 | `k` | stop the selected process and its children, after confirming |
 | `b` | stop every background helper, after confirming |
+| `p` | remove what the selected ended session left behind, after confirming |
 | `y`, `n` | answer a confirmation |
 | `e` | show or hide ended sessions |
 | `/` | filter by session, title, agent, model, directory, or PID |
@@ -239,6 +240,9 @@ agent-ps list --all               # include ended sessions
 agent-ps list --json              # machine readable, with idle seconds
 agent-ps list --limit 100         # how many ended sessions (default 40)
 agent-ps list --filter benchmark  # same match as the / key
+agent-ps prune                    # what ended sessions left, minus the conversation
+agent-ps prune --older-than 30d   # only sessions idle that long (default 7d)
+agent-ps prune --apply            # actually remove it
 agent-ps agents                   # which agents were found, and where
 agent-ps --agent codex list       # one agent, or a comma separated list
 agent-ps stop 32244               # stop one process tree
@@ -252,6 +256,30 @@ agent-ps --version
 
 Piping works without a subcommand: with stdout not a terminal, agent-ps prints
 the table and exits.
+
+## Reclaiming space
+
+A session writes more than its conversation. Claude Code alone keeps subagent
+transcripts, file history for `/rewind`, task records and a session
+environment, and on this machine those came to a fifth of everything on disk.
+
+```bash
+agent-ps prune
+```
+
+Reports and removes nothing. It lists what ended sessions left behind, grouped
+by what it is and which sessions hold the most, and `--apply` removes it.
+
+In the table, `p` does the same for the row you are on, and the detail panel
+marks which parts of a session those are. On a session that is still running it
+refuses and says why rather than going quiet.
+
+Three things it will not do. It never touches a transcript, so every session
+stays resumable. It never touches a session with a running process, whatever
+its age, because file history is what `/rewind` reaches for. And it never
+touches OpenCode, Copilot or Antigravity, whose sessions are rows in a database
+the agent may have open: agent-ps reads, and does not write, the stores it
+did not create.
 
 ## What each column means
 
@@ -348,7 +376,7 @@ install fetches. The build is reproducible: the same source always produces the
 same bytes, so the committed executable can be checked against the tree.
 
 ```
-d46f6f55086b25c4efab962d2945e70c2c486aa62931cf6e532cec2c16174496  agent-ps
+b57e60c153471ce8a5630d72a2688633b7d6ff9c5359b372e12fc03d0d9379d9  agent-ps
 ```
 
 Adding an agent takes one class and one line in the registry. See

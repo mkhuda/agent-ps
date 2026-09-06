@@ -102,6 +102,22 @@ class HermesBackend(SqliteBackend):
         ]
         return sorted([p for p in parts if p[1]], key=lambda p: -p[1])
 
+    #: The conversation itself is rows in the database, which is never written
+    #: to. The dumps are files beside it, and they are the larger half.
+    prunable = ("request dumps",)
+
+    def prune_paths(self, session_id, path):
+        """One file per turn, so this answers with files rather than a directory.
+
+        Built here rather than from `disk_paths`, which this backend does not
+        use: its conversation is rows, and only the dumps are on disk at all.
+        """
+        pattern = os.path.join(self.root, "sessions",
+                               f"request_dump_{session_id}_*.json")
+        found = [("request dumps", p, directory_size(p))
+                 for p in sorted(glob.glob(pattern))]
+        return [part for part in found if part[2]]
+
     def details(self, row):
         found = self.query(
             "SELECT input_tokens, output_tokens, reasoning_tokens, api_call_count, "

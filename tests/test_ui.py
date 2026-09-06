@@ -4,10 +4,14 @@ import os
 import sys
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import curses
+
 from agent_ps import ui, util
+from agent_ps.ui import Tui
 from agent_ps.backends.base import KIND_ENDED, KIND_SESSION, blank_row
 from agent_ps.collect import is_live, idle_seconds
 
@@ -122,3 +126,218 @@ class Filtering(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Advisory(unittest.TestCase):
+    """The one line that says what is worth doing about what is on screen."""
+
+    def line(self, rows=(), history=None, show_ended=False):
+        tui = Tui.__new__(Tui)
+        tui.rows = list(rows)
+        tui.show_ended = show_ended
+        tui.history = {"bytes": 0, "ended": 0, "recent": 0, "spare": 0,
+                       "spare_sessions": 0}
+        tui.history.update(history or {})
+        return tui.advisory()
+
+    def test_reclaimable_space_is_reported(self):
+        said = self.line(history={"spare": 101_000_000, "spare_sessions": 43})
+        # binary units, as everywhere else in the table
+        self.assertIn(util.human_bytes(101_000_000), said)
+        self.assertIn("agent-ps prune", said)
+
+    def test_nothing_is_said_when_there_is_nothing_to_reclaim(self):
+        self.assertEqual(self.line(), "")
+
+    def test_something_that_just_happened_is_said_first(self):
+        # a standing condition must not push aside an event
+        said = self.line(history={"spare": 101_000_000, "recent": 4})
+        self.assertIn("ended in the past week", said)
+
+
+class PrunableInTheDetail(unittest.TestCase):
+    """Which parts of a session the panel marks as removable."""
+
+    class Backend:
+        prunable = ("subagents", "file history")
+
+        def disk_breakdown(self, session_id, path):
+            return [("transcript", 9_000_000), ("subagents", 4_000_000),
+                    ("file history", 1_000_000)]
+
+        def details(self, row):
+            return []
+
+    def usage_lines(self, row):
+        with mock.patch.object(curses, "color_pair", lambda n: 0):
+            tui = Tui.__new__(Tui)
+            tui.agent_colour = {}
+            tui.C_BUSY, tui.C_WARNING = 1, 2
+            groups = dict(tui.detail_groups(row, self.Backend()))
+        return [value for _, value, _ in groups["usage"]]
+
+    def row(self, **over):
+        base = dict(blank_row("claude"), session_id="s1", disk=14_000_000,
+                    path="/tmp/s1.jsonl", kind=KIND_ENDED)
+        base.update(over)
+        return base
+
+    def test_an_ended_session_marks_what_can_go(self):
+        lines = " ".join(self.usage_lines(self.row()))
+        self.assertIn("subagents  can be pruned", lines)
+        self.assertIn("file history  can be pruned", lines)
+
+    def test_the_transcript_is_never_marked(self):
+        for line in self.usage_lines(self.row()):
+            if "transcript" in line:
+                self.assertNotIn("can be pruned", line)
+
+    def test_a_running_session_marks_nothing(self):
+        # prune leaves a live session alone however much it is holding, so
+        # saying otherwise here would be a promise the command does not keep
+        live = self.row(pid=4242, kind=KIND_SESSION, uptime=60)
+        for line in self.usage_lines(live):
+            self.assertNotIn("can be pruned", line)
+
+
+class PruneKey(unittest.TestCase):
+    """What `p` does, and what it refuses to do."""
+
+    class Backend:
+        prunable = ("subagents",)
+
+        def __init__(self, parts=None):
+            self.parts = parts if parts is not None else [
+                ("subagents", "/tmp/nowhere/sub", 4_000_000)]
+
+        def prune_paths(self, session_id, path):
+            return list(self.parts)
+
+    class Snapshot:
+        def __init__(self, backend):
+            self.backend = backend
+
+        def find_backend(self, name):
+            return self.backend
+
+    def tui(self, backend=None):
+        made = Tui.__new__(Tui)
+        made.snapshot = self.Snapshot(backend or self.Backend())
+        made.pending = None
+        made.message = ""
+        made.message_at = 0
+        return made
+
+    def row(self, **over):
+        base = dict(blank_row("claude"), session_id="s1", path="/tmp/s1.jsonl",
+                    title="web-app", kind=KIND_ENDED)
+        base.update(over)
+        return base
+
+    def test_an_ended_session_is_asked_about_before_anything_goes(self):
+        made = self.tui()
+        made.confirm_prune(self.row())
+        self.assertIsNotNone(made.pending)
+        question = made.pending[0]
+        self.assertIn("web-app", question)
+        self.assertIn("subagents", question)
+        self.assertIn("transcript is kept", question)
+
+    def test_a_running_session_is_refused_and_told_why(self):
+        made = self.tui()
+        made.confirm_prune(self.row(pid=4242, kind=KIND_SESSION, uptime=60))
+        self.assertIsNone(made.pending, "a live session must not be offered")
+        self.assertIn("still running", made.message)
+        # the reason has to hold for every agent, and /rewind is Claude only
+        self.assertNotIn("/rewind", made.message)
+
+    def test_a_session_with_nothing_spare_says_so_rather_than_asking(self):
+        made = self.tui(self.Backend(parts=[]))
+        made.confirm_prune(self.row())
+        self.assertIsNone(made.pending)
+        self.assertIn("Nothing to prune", made.message)
+        self.assertIn("never removed", made.message)
+
+    def test_a_row_with_no_session_says_so_rather_than_blaming_transcripts(self):
+        made = self.tui()
+        made.confirm_prune(self.row(session_id=""))
+        self.assertIsNone(made.pending)
+        self.assertIn("No session id", made.message)
+
+    def test_applying_removes_the_parts_and_leaves_the_transcript(self):
+        import os
+        import shutil as sh
+        import tempfile
+        root = tempfile.mkdtemp()
+        self.addCleanup(sh.rmtree, root, ignore_errors=True)
+        transcript = os.path.join(root, "s1.jsonl")
+        with open(transcript, "w") as handle:
+            handle.write('{"kept": true}\n')
+        spare = os.path.join(root, "subagents")
+        os.makedirs(spare)
+        with open(os.path.join(spare, "a.jsonl"), "w") as handle:
+            handle.write("x" * 1000)
+
+        made = self.tui()
+        made.detail = None
+        made.snapshot.history = lambda force=False: {}
+        made.poll = lambda: None
+        made.apply_prune(self.row(path=transcript),
+                         [("subagents", spare, 1000)])
+
+        self.assertFalse(os.path.exists(spare))
+        self.assertTrue(os.path.exists(transcript))
+        with open(transcript) as handle:
+            self.assertIn("kept", handle.read())
+        self.assertIn("Freed", made.message)
+
+    def test_what_cannot_be_removed_is_reported_rather_than_hidden(self):
+        made = self.tui()
+        made.detail = None
+        made.snapshot.history = lambda force=False: {}
+        made.poll = lambda: None
+        made.apply_prune(self.row(),
+                         [("subagents", "/does/not/exist/at/all", 500)])
+        self.assertIn("could not be removed", made.message)
+
+
+class ReclaimableTotal(unittest.TestCase):
+    """The advisory total has to agree with what prune would actually do."""
+
+    class Backend:
+        name = "claude"
+        prunable = ("subagents",)
+
+        def __init__(self, rows):
+            self.rows = rows
+
+        def sessions(self, limit=None):
+            return [dict(r) for r in self.rows]
+
+        def prune_paths(self, session_id, path):
+            return [("subagents", f"/tmp/{session_id}", 1_000_000)]
+
+    def snapshot(self, rows, alive=()):
+        from agent_ps.collect import Snapshot
+        made = Snapshot([self.Backend(rows)])
+        made._alive = set(alive)
+        return made
+
+    def session(self, sid, days):
+        return dict(blank_row("claude"), session_id=sid,
+                    last_active=time.time() - days * 86400)
+
+    def test_old_ended_sessions_are_counted(self):
+        made = self.snapshot([self.session("a", 30), self.session("b", 20)])
+        self.assertEqual(made.reclaimable(time.time() - 7 * 86400), (2_000_000, 2))
+
+    def test_a_session_with_a_process_is_left_out(self):
+        # it is old enough, but prune would refuse it, so counting it would
+        # promise space that pressing p never frees
+        made = self.snapshot([self.session("a", 30), self.session("b", 20)],
+                             alive=[("claude", "a")])
+        self.assertEqual(made.reclaimable(time.time() - 7 * 86400), (1_000_000, 1))
+
+    def test_a_recent_session_is_left_out(self):
+        made = self.snapshot([self.session("a", 30), self.session("b", 1)])
+        self.assertEqual(made.reclaimable(time.time() - 7 * 86400), (1_000_000, 1))

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0
+
+Reclaiming what ended sessions leave behind.
+
+- `agent-ps prune` removes the parts of an ended session that are not the
+  conversation: subagent transcripts, file history, task records, shell
+  snapshots, request dumps. On the machine it was written on that is 96M across
+  43 sessions, against 33M for deleting every session older than a month,
+  because the sessions holding the space are recent rather than old.
+- It reports by default and removes only with `--apply`. Transcripts are never
+  removed, a session with a running process is never touched whatever its age,
+  and agents that keep sessions in a database are left alone entirely.
+- `p` in the table does the same for the selected row, after a confirmation
+  naming what goes. On a running session it refuses and says why.
+- The detail panel marks which parts of a session can be pruned, and the line
+  above the keys reports the total when there is one.
+- One confirmation path now serves every destructive key, rather than each
+  growing its own.
+- Release pages take their title and notes from this file instead of the commit
+  list.
+
 ## 0.5.0
 
 The token counts four agents were already writing.

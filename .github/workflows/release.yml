@@ -77,13 +77,26 @@ jobs:
       - uses: actions/checkout@v4
       - name: Publish the checksum alongside it
         run: sha256sum agent-ps > SHA256SUMS
+      # the release page says what the changelog says. Generated notes are the
+      # commit list, which describes the release to a machine rather than to
+      # someone deciding whether to upgrade.
+      - name: Title and notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          python3 scripts/release_notes.py "$version" --title > title.txt
+          python3 scripts/release_notes.py "$version" --notes > notes.md
+          echo "title: $(cat title.txt)"
+          test -s notes.md || { echo "no notes for $version" >&2; exit 1; }
+
       - name: Create or update the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" agent-ps SHA256SUMS --clobber
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "$(cat title.txt)" --notes-file notes.md
           else
             gh release create "$GITHUB_REF_NAME" agent-ps SHA256SUMS \
-              --title "$GITHUB_REF_NAME" --generate-notes
+              --title "$(cat title.txt)" --notes-file notes.md
           fi

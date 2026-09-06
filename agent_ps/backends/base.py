@@ -118,6 +118,13 @@ class Backend:
     #: an agent that counts something nobody else does simply does not name it.
     usage_keys = {}
 
+    #: Labels from `disk_paths` that are not the conversation, and so can be
+    #: removed without losing anything a session could be resumed from. Empty by
+    #: default, and empty for every database backend: for those, removing a
+    #: session means writing to a file the agent may have open, and reading
+    #: everything read only is not a property worth trading for a cleaner.
+    prunable = ()
+
     #: Set where the agent writes a running total each turn rather than that
     #: turn's own numbers, in which case the newest entry is the answer and
     #: adding them up would count every turn as many times as it has successors.
@@ -313,6 +320,27 @@ class Backend:
                 parts.append((label, size))
         parts.sort(key=lambda p: -p[1])
         return parts
+
+    def prune_paths(self, session_id, path):
+        """What can go, as label and path pairs, largest first.
+
+        Built from `disk_paths`, so a backend that learns about a new directory
+        gets it counted and removed by the same one line.
+        """
+        # asked first, so a backend that declares nothing is never walked at
+        # all. Every database backend is in that group, and its disk_paths does
+        # not even describe files.
+        if not self.prunable:
+            return []
+        found = []
+        for label, entry in self.disk_paths(session_id, path):
+            if label not in self.prunable or "*" in entry:
+                continue
+            size = directory_size(entry)
+            if size:
+                found.append((label, entry, size))
+        found.sort(key=lambda part: -part[2])
+        return found
 
     def disk_usage(self, session_id, path):
         now = time.time()
