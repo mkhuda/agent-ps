@@ -134,6 +134,7 @@ def matches(cmd, patterns):
 
 
 def alive(pid):
+    """Whether a PID is still there. Cheap, and counts a zombie as present."""
     try:
         os.kill(pid, 0)
         return True
@@ -141,6 +142,22 @@ def alive(pid):
         return False
     except PermissionError:
         return True
+
+
+def zombie(pid):
+    """Whether a PID is only waiting to be reaped.
+
+    A killed child stays visible until its parent collects it, and a parent
+    blocked in the call we just interrupted never will. It has stopped, so a
+    stop that leaves one behind has done its job.
+    """
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/stat") as handle:
+                return handle.read().rpartition(")")[2].split()[0] == "Z"
+        except OSError:
+            return False
+    return run(["ps", "-o", "state=", "-p", str(pid)]).strip().startswith("Z")
 
 
 def children_of(procs):
@@ -163,30 +180,26 @@ def collect_tree(pid, tree, seen=None):
 
 def terminate(pid, grace=1.0):
     """SIGTERM, a moment to exit cleanly, then SIGKILL."""
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return True
-    except PermissionError:
-        return False
-    deadline = time.time() + grace
-    while time.time() < deadline:
-        if not alive(pid):
+    for signal_number in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.kill(pid, signal_number)
+        except ProcessLookupError:
             return True
-        time.sleep(0.05)
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except ProcessLookupError:
-        return True
-    except PermissionError:
-        return False
-    # SIGKILL lands after os.kill returns, so wait rather than ask at once
+        except PermissionError:
+            return False
+        if _gone(pid, grace):
+            return True
+    return False
+
+
+def _gone(pid, grace):
+    """Wait for a signal to take effect. Delivery outlives the os.kill call."""
     deadline = time.time() + grace
     while time.time() < deadline:
         if not alive(pid):
             return True
         time.sleep(0.02)
-    return False
+    return not alive(pid) or zombie(pid)
 
 
 def stop_tree(pid, procs, dry_run=False):

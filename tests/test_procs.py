@@ -138,3 +138,28 @@ class Terminating(unittest.TestCase):
         procs.terminate(pid)
         time.sleep(0.2)
         self.assertTrue(procs.terminate(pid))
+
+    def test_a_child_left_unreaped_counts_as_stopped(self):
+        # a killed child stays visible until its parent collects it, and a
+        # parent blocked in the call we interrupted never will
+        parent = self.spawn(
+            "import subprocess, sys, signal, time\n"
+            "signal.signal(signal.SIGTERM, lambda *a: None)\n"
+            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+            "time.sleep(300)\n")
+        for _ in range(40):
+            kids = [p["pid"] for p in procs.table() if p["ppid"] == parent]
+            if kids:
+                break
+            time.sleep(0.05)
+        else:
+            self.skipTest("the decoy never started a child")
+        self.addCleanup(self.reap, kids[0])
+        self.assertTrue(procs.terminate(kids[0], grace=1.0),
+                        "a zombie has stopped, whatever ps still shows")
+        self.assertTrue(procs.zombie(kids[0]) or not procs.alive(kids[0]))
+
+    def test_a_running_process_is_not_called_a_zombie(self):
+        pid = self.spawn("import time\ntime.sleep(300)\n")
+        self.assertFalse(procs.zombie(pid))
+        self.assertTrue(procs.alive(pid))

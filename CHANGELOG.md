@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.2
+
+A stop that worked is no longer reported as a failure.
+
+- Killing a session's children leaves them waiting to be collected by a parent
+  that is itself about to be killed, and `ps` still lists them. They were
+  counted as survivors, so stopping a Claude session with six MCP servers under
+  it reported one of seven stopped when all seven had gone.
+
 ## 0.6.1
 
 Stopping a session now stops what it started.
