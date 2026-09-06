@@ -118,11 +118,8 @@ class Backend:
     #: an agent that counts something nobody else does simply does not name it.
     usage_keys = {}
 
-    #: Labels from `disk_paths` that are not the conversation, and so can be
-    #: removed without losing anything a session could be resumed from. Empty by
-    #: default, and empty for every database backend: for those, removing a
-    #: session means writing to a file the agent may have open, and reading
-    #: everything read only is not a property worth trading for a cleaner.
+    #: Labels from `disk_paths` that are not the conversation. Empty for every
+    #: database backend: removing a row means writing to a file the agent holds.
     prunable = ()
 
     #: Set where the agent writes a running total each turn rather than that
@@ -327,9 +324,7 @@ class Backend:
         Built from `disk_paths`, so a backend that learns about a new directory
         gets it counted and removed by the same one line.
         """
-        # asked first, so a backend that declares nothing is never walked at
-        # all. Every database backend is in that group, and its disk_paths does
-        # not even describe files.
+        # first, so a backend that declares nothing is never walked
         if not self.prunable:
             return []
         found = []

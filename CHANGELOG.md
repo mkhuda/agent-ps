@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1
+
+Stopping a session now stops what it started, and says so truthfully.
+
+- `k` in the table stops the whole process tree, as `agent-ps stop` already
+  did. It was reading the agent rows rather than the process table, so a
+  session's MCP servers and helpers were left orphaned.
+- A stop is no longer reported as failed when it worked. SIGKILL is delivered
+  after `os.kill` returns, and the check ran before the kernel had finished.
+- When something does survive, the message names the PIDs instead of only
+  counting them.
+
 ## 0.6.0
 
 Reclaiming what ended sessions leave behind.

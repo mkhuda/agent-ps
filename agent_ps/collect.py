@@ -25,8 +25,7 @@ class Snapshot:
         self._history = {"bytes": 0, "ended": 0, "recent": 0, "spare": 0,
                          "spare_sessions": 0}
         self._history_at = 0.0
-        #: Sessions seen with a process on the last pass, so the reclaimable
-        #: total can leave out what prune would refuse to touch.
+        #: Sessions seen with a process, which prune refuses to touch.
         self._alive = set()
 
     def rows(self, show_ended=False, limit=40):
@@ -52,8 +51,7 @@ class Snapshot:
             running.extend(hosted)
 
             live = {r["session_id"] for r in attached + hosted if r["session_id"]}
-            # remembered even when ended rows are not asked for, because the
-            # reclaimable total has to leave out whatever prune will refuse
+            # kept even when ended rows are not asked for
             alive.update((backend.name, sid) for sid in live)
 
             if show_ended:
@@ -92,10 +90,8 @@ class Snapshot:
     def reclaimable(self, before):
         """What ended sessions are holding that is not their conversation.
 
-        Per session rather than per directory, because the age and whether a
-        process is running are session facts. That costs a tenth of a second
-        against the four hundredths the rest of this takes, which is why it
-        rides the slow poll rather than the refresh.
+        Per session rather than per directory, since age and liveness are
+        session facts. That is why it rides the slow poll.
         """
         total = sessions = 0
         for backend in self.backends:

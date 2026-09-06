@@ -13,7 +13,7 @@ from . import backends
 from .collect import ATTACH_WINDOW, idle_seconds, is_live
 from .backends.base import (ATTACH_INFERRED, KIND_ENDED, KIND_SESSION,
                             STATUS_BUSY)
-from .procs import children_of, collect_tree, terminate
+from .procs import children_of, collect_tree, table as proc_table, terminate
 from .resume import open_in_terminal, resume_command
 from .util import FAILURES, human_bytes, human_duration, short_path
 
@@ -223,9 +223,7 @@ class Tui:
         self.show_ended = False
         self.filter_text = ""
         self.editing_filter = False
-        # a question waiting for y or n, as (what is being asked, what to do).
-        # Carrying the action means one confirmation path serves every
-        # destructive key rather than each growing its own.
+        # (question, action), so one y/n path serves every destructive key
         self.pending = None
         self.detail = None
         self.sort = 0
@@ -424,8 +422,7 @@ class Tui:
                 spare = () if is_live(row) else backend.prunable
                 for label, size in backend.disk_breakdown(row["session_id"],
                                                           row.get("path", "")):
-                    # marked only on an ended session, since prune leaves a
-                    # running one alone however much it is holding
+                    # ended only, since prune leaves a running session alone
                     mark = "  can be pruned" if label in spare else ""
                     usage.append(("", f"{human_bytes(size):>7}  {label}{mark}",
                                   curses.A_DIM if mark else 0))
@@ -540,8 +537,7 @@ class Tui:
         if recent and not self.show_ended:
             return f"{recent} session(s) ended in the past week, press e to show them"
 
-        # last, because unlike the others this is a standing condition rather
-        # than something that just happened
+        # last: a standing condition, not something that just happened
         spare = self.history["spare"]
         if spare:
             return (f"{human_bytes(spare)} reclaimable in ended sessions, "
@@ -620,7 +616,9 @@ class Tui:
         directory is part of the question rather than something to check
         afterwards.
         """
-        order = collect_tree(row["pid"], children_of(self.rows))
+        # the real process table, not the agent rows: a session's children are
+        # MCP servers and helpers, which are not rows and would be orphaned
+        order = collect_tree(row["pid"], children_of(proc_table()))
         note = f" in {short_path(row['cwd'], 40)}" if row["cwd"] else ""
         if row["attach"] == ATTACH_INFERRED:
             note += ", session matched by directory"
@@ -630,10 +628,8 @@ class Tui:
     def confirm_prune(self, row):
         """Ask before removing what an ended session left behind.
 
-        Refuses a session that is still running, and says why rather than
-        going quiet. What a session leaves behind is still in use while its
-        process is alive: for Claude Code the file history is what /rewind
-        reaches for, and no age threshold makes that safe.
+        Refuses a session that is still running, and says why. What it left
+        is still in use while the process is alive.
         """
         name = row["title"] or row["name"] or row["session_id"] or "that session"
         if is_live(row):
@@ -670,8 +666,7 @@ class Tui:
                 failed += 1
         note = f"Freed {human_bytes(freed)}."
         self.notify(note if not failed else f"{note} {failed} could not be removed.")
-        # the sizes on screen are now wrong, and the reclaimable total with them
-        self.snapshot.history(force=True)
+        self.snapshot.history(force=True)  # the sizes on screen are now wrong
         self.poll()
 
     def open_selected(self):
@@ -704,7 +699,10 @@ class Tui:
     def apply_kill(self, order):
         self.detail = None
         stopped = [p for p in order if terminate(p)]
-        self.notify(f"Stopped {len(stopped)} of {len(order)} processes.")
+        left = [p for p in order if p not in stopped]
+        note = f"Stopped {len(stopped)} of {len(order)} processes."
+        self.notify(note if not left else
+                    f"{note} Still running: {', '.join(str(p) for p in left)}.")
         self.poll()
 
     def handle(self, key):

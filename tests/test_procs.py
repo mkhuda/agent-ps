@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+import signal
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -84,3 +85,56 @@ class WorkingDirsOnLinux(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Terminating(unittest.TestCase):
+    """What `terminate` reports has to match what actually happened."""
+
+    def spawn(self, body):
+        """A process that is not our child, so reaping cannot confuse alive()."""
+        import subprocess
+        import tempfile
+        handle = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False)
+        handle.write(body)
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        subprocess.run(["/bin/sh", "-c",
+                        f"nohup {sys.executable} {handle.name} >/dev/null 2>&1 &"])
+        for _ in range(40):
+            found = subprocess.run(["pgrep", "-f", handle.name],
+                                   capture_output=True, text=True).stdout.split()
+            if found:
+                pid = int(found[0])
+                self.addCleanup(self.reap, pid)
+                return pid
+            time.sleep(0.05)
+        self.skipTest("could not start a process to signal")
+
+    @staticmethod
+    def reap(pid):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+    def test_a_process_that_ignores_sigterm_is_still_reported_stopped(self):
+        # SIGKILL is delivered after os.kill returns, so a report taken at once
+        # says the kill failed when it did not
+        pid = self.spawn("import signal, time\n"
+                         "signal.signal(signal.SIGTERM, lambda *a: None)\n"
+                         "time.sleep(300)\n")
+        self.assertTrue(procs.terminate(pid, grace=1.0))
+        time.sleep(0.2)
+        self.assertFalse(procs.alive(pid))
+
+    def test_a_process_that_exits_on_sigterm_is_reported_stopped(self):
+        pid = self.spawn("import time\ntime.sleep(300)\n")
+        self.assertTrue(procs.terminate(pid, grace=1.0))
+        time.sleep(0.2)
+        self.assertFalse(procs.alive(pid))
+
+    def test_a_pid_that_is_already_gone_counts_as_stopped(self):
+        pid = self.spawn("import time\ntime.sleep(300)\n")
+        procs.terminate(pid)
+        time.sleep(0.2)
+        self.assertTrue(procs.terminate(pid))

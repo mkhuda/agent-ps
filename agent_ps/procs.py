@@ -176,9 +176,17 @@ def terminate(pid, grace=1.0):
         time.sleep(0.05)
     try:
         os.kill(pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
-    return not alive(pid)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    # SIGKILL lands after os.kill returns, so wait rather than ask at once
+    deadline = time.time() + grace
+    while time.time() < deadline:
+        if not alive(pid):
+            return True
+        time.sleep(0.02)
+    return False
 
 
 def stop_tree(pid, procs, dry_run=False):

@@ -92,8 +92,12 @@ def cmd_stop(args):
     if args.dry_run:
         print("Would stop:", ", ".join(str(p) for p in order))
         return 0
+    left = [p for p in order if p not in stopped]
     print(f"Stopped {len(stopped)} of {len(order)} processes.")
-    return 0 if len(stopped) == len(order) else 1
+    if left:
+        print(f"Still running: {', '.join(str(p) for p in left)}.", file=sys.stderr)
+        return 1
+    return 0
 
 
 def cmd_resume(args):
