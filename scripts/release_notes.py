@@ -16,6 +16,9 @@ A section looks like this, and the first line under the heading is the title:
 
     ## 0.5.0
 
+which gives the title `v0.6.0: Reclaiming what ended sessions left behind`, and
+the bullets as the notes.
+
 Usage:
     release_notes.py 0.6.0 --title
     release_notes.py 0.6.0 --notes
@@ -62,14 +65,13 @@ def split(lines):
 
 def main(argv):
     if len(argv) != 2 or argv[1] not in ("--title", "--notes"):
-        raise SystemExit(__doc__.strip().splitlines()[-2].strip())
+        raise SystemExit("usage: release_notes.py <version> --title|--notes")
     version, what = argv[0], argv[1]
     with open(os.path.join(HERE, "CHANGELOG.md")) as handle:
         title, notes = split(section(version, handle.read()))
     if what == "--title":
-        # the tag is already the release's name everywhere else it appears, so
-        # the title says what the release is rather than repeating the number
-        print(title.rstrip(".") or version)
+        summary = title.rstrip(".")
+        print(f"v{version}: {summary}" if summary else f"v{version}")
     else:
         print("\n".join(notes).strip())
     return 0

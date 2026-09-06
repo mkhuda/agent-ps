@@ -2,7 +2,7 @@
 
 ## 0.6.1
 
-Stopping a session now stops what it started, and says so truthfully.
+Stopping a session now stops what it started.
 
 - `k` in the table stops the whole process tree, as `agent-ps stop` already
   did. It was reading the agent rows rather than the process table, so a

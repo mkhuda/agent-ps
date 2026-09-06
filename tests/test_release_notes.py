@@ -40,6 +40,16 @@ class Reading(unittest.TestCase):
         title, _ = self.parts("0.6.0")
         self.assertEqual(title, "Reclaiming what ended sessions left behind.")
 
+    def test_the_printed_title_carries_the_version(self):
+        import io
+        import contextlib
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            release_notes.main(["0.6.1", "--title"])
+        printed = out.getvalue().strip()
+        self.assertTrue(printed.startswith("v0.6.1: "), printed)
+        self.assertFalse(printed.endswith("."), printed)
+
     def test_the_notes_are_the_bullets(self):
         _, notes = self.parts("0.6.0")
         self.assertEqual(notes[0], "- one thing that changed")
