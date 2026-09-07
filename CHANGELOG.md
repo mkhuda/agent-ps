@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.4
+
+Terminals without colour now actually degrade instead of losing the cursor.
+
+- A terminal with no colour used to lose the cursor, the header and every
+  warning: they were all painted with a colour pair, and with none initialised
+  that paint was invisible. Attributes now carry the same distinctions on
+  every terminal, and colour is layered on top where it exists.
+- A confirmation puts `[y]`/`[n]` first and the detail last, so the answer
+  survives truncation instead of the context. `Stop 7 process(es) in
+  ~/projects/…, session matched by directory? [y] confirm [n] cancel` used to
+  lose its own answer keys past 80 columns.
+- The key bar drops its least used keys as the terminal narrows rather than
+  being cut off mid-word, and `q quit` is never one of the ones it drops.
+  `?` opens a screen listing every key, including the ones that never fit.
+- An eighth agent no longer wears the first one's colour on a plain terminal:
+  the two now differ by weight as well as colour.
+- The sorted column no longer shares a colour with the selected row; it is
+  marked with the header's own colour, bold and underlined.
+- An empty table says why: no rows match a filter, sessions are hidden behind
+  `e`, or nothing was found at all, each with what to press next.
+
 ## 0.6.3
 
 Two crashes, and a cursor that could move under your hand.

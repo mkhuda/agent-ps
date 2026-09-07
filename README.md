@@ -161,6 +161,7 @@ something.
 | esc | leave filter mode, or close the detail panel |
 | space | pause refreshing |
 | `r` | refresh now |
+| `?` | show or hide this list |
 | `q` | quit |
 
 Those keys live at the bottom of the screen, under a line naming every agent on
@@ -187,8 +188,12 @@ PID     AGENT             SESSION         STATUS MODEL               UPTIME  ACT
 -       claude            notes           ended  opus-5              -       2h22m ago -     -      84M
 
  agents  claude  codex  commandcode  copilot  hermes  opencode  pi        sorted by disk, high to low
- up/down select   enter details   k stop   b background   e hide ended   s sort   S reverse   / filter   q quit
+ up/down move   enter details   k stop   / filter   s sort   e hide ended   ? keys   b background   p prune   S reverse   q quit
 ```
+
+Keys drop from the right as the terminal narrows, `q quit` last of all. Press
+`?` for the ones that never fit: `home`/`end`, `space` to pause, `r` to refresh
+now, `y`/`n` to answer a confirmation.
 
 `v` means descending and `^` ascending; `S` flips it. Numbers start at the
 largest, names start at A, and rows with nothing in that column go to the end
@@ -376,7 +381,7 @@ install fetches. The build is reproducible: the same source always produces the
 same bytes, so the committed executable can be checked against the tree.
 
 ```
-33233c59c010075655ca0b7f08efe1c016b7091913a3df04e3e91ed8132df45a  agent-ps
+03cc2271187211d38e27773db9067a2a71c5a7055d6776c5d85df178f58f4d0c  agent-ps
 ```
 
 Adding an agent takes one class and one line in the registry. See

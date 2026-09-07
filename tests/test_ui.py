@@ -238,10 +238,11 @@ class PruneKey(unittest.TestCase):
         made = self.tui()
         made.confirm_prune(self.row())
         self.assertIsNotNone(made.pending)
-        question = made.pending[0]
-        self.assertIn("web-app", question)
-        self.assertIn("subagents", question)
-        self.assertIn("transcript is kept", question)
+        verb, detail, _ = made.pending
+        self.assertIn("web-app", detail)
+        self.assertIn("subagents", detail)
+        self.assertIn("transcript kept", detail)
+        self.assertIn("remove", verb)
 
     def test_a_running_session_is_refused_and_told_why(self):
         made = self.tui()
@@ -451,3 +452,110 @@ class SummaryArithmetic(unittest.TestCase):
         Tui.__init__(made, None, None)
         for key in ("bytes", "ended", "recent", "spare", "spare_sessions"):
             self.assertIn(key, made.history)
+
+
+class KeyBarPriority(unittest.TestCase):
+    """The key bar drops low priority keys first, and q is never one of them."""
+
+    def bar(self, width, show_ended=False):
+        made = Tui.__new__(Tui)
+        made.show_ended = show_ended
+        return made.key_bar(width)
+
+    def test_everything_fits_on_a_wide_terminal(self):
+        wide = self.bar(250)
+        for key in ("up/down", "enter", "k", "b", "p", "e", "s", "S", "/", "?", "q"):
+            self.assertIn(key, wide.split())
+
+    def test_q_quit_survives_at_80_columns(self):
+        # this used to be the first casualty: the bar was 114 characters
+        bar = self.bar(80)
+        self.assertLessEqual(len(bar), 79)
+        self.assertIn("q quit", bar)
+
+    def test_it_never_exceeds_the_width_it_was_given(self):
+        for width in (250, 120, 100, 80, 60, 45, 40):
+            with self.subTest(width):
+                self.assertLessEqual(len(self.bar(width)), width - 1)
+
+    def test_ended_mode_changes_the_e_label(self):
+        self.assertIn("show ended", self.bar(250, show_ended=False))
+        self.assertIn("hide ended", self.bar(250, show_ended=True))
+
+
+class ConfirmationLayout(unittest.TestCase):
+    """The answer keys must survive truncation; the detail is what gives."""
+
+    def rendered(self, verb, detail, width):
+        prefix = f" [y] {verb}   [n] cancel"
+        room = width - 1 - len(prefix) - 3
+        return f"{prefix}   {detail[:room]}" if detail and room > 0 else prefix
+
+    def test_both_keys_are_present_at_every_realistic_width(self):
+        detail = ("in ~/projects/agent-ps/some/very/long/nested/directory, "
+                 "matched by directory")
+        for width in (250, 100, 80, 60, 45):
+            with self.subTest(width):
+                text = self.rendered("stop 7 processes", detail, width)
+                self.assertIn("[y]", text[:width - 1])
+                self.assertIn("[n]", text[:width - 1])
+
+    def test_the_verb_is_never_truncated_even_with_no_room_for_detail(self):
+        text = self.rendered("stop 7 processes", "somewhere far away", 30)
+        self.assertIn("stop 7 processes", text)
+
+
+class EmptyMessage(unittest.TestCase):
+    def make(self, filter_text="", show_ended=False, ended=0):
+        made = Tui.__new__(Tui)
+        made.filter_text = filter_text
+        made.show_ended = show_ended
+        made.history = {"ended": ended}
+        return made
+
+    def test_a_filter_with_no_matches_says_so(self):
+        said = self.make(filter_text="zzz").empty_message()
+        self.assertIn("/zzz", said)
+        self.assertIn("esc", said)
+
+    def test_hidden_ended_sessions_are_offered(self):
+        said = self.make(ended=12).empty_message()
+        self.assertIn("12", said)
+        self.assertIn("press e", said)
+
+    def test_nothing_at_all_points_at_agents_command(self):
+        said = self.make(show_ended=True).empty_message()
+        self.assertIn("agent-ps agents", said)
+
+    def test_a_filter_takes_priority_over_ended_sessions(self):
+        said = self.make(filter_text="zzz", ended=12).empty_message()
+        self.assertIn("zzz", said)
+        self.assertNotIn("12", said)
+
+
+class AgentStyle(unittest.TestCase):
+    """A colour that repeats must not look identical to the one before it."""
+
+    def test_the_eighth_agent_does_not_match_the_first_on_a_basic_terminal(self):
+        with mock.patch.object(curses, "COLORS", 8, create=True):
+            colour0, attr0 = ui._agent_style(0)
+            colour7, attr7 = ui._agent_style(7)
+            self.assertEqual(colour0, colour7, "the premise: colours do repeat")
+            self.assertNotEqual(attr0, attr7,
+                                "same colour, same attribute: indistinguishable")
+
+    def test_a_256_colour_terminal_gives_the_eighth_agent_its_own_colour(self):
+        with mock.patch.object(curses, "COLORS", 256, create=True):
+            colour0, _ = ui._agent_style(0)
+            colour7, _ = ui._agent_style(7)
+            self.assertNotEqual(colour0, colour7)
+
+
+class HelpOverlay(unittest.TestCase):
+    def test_every_key_in_the_bar_is_documented_somewhere(self):
+        # the bar can drop a key as the terminal narrows; the overlay must
+        # still say what it does
+        from agent_ps.ui import HELP
+        documented = " ".join(k for k, _ in HELP)
+        for key in ("k", "b", "p", "e", "s", "S", "/", "q", "space", "r"):
+            self.assertIn(key, documented)

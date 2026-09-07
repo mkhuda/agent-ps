@@ -8,10 +8,12 @@ computed, and a terminfo that cannot hide the cursor.
 import os
 import re
 import select
+import shutil
 import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 
@@ -31,14 +33,20 @@ except ImportError:  # pragma: no cover - Windows has no pty
 
 @unittest.skipUnless(HAVE_PTY, "needs a pseudo terminal")
 class UnderAPseudoTerminal(unittest.TestCase):
+    def setUp(self):
+        # an empty home, not the real one: the first poll otherwise scans
+        # whatever sessions actually exist on this machine, which is slow and
+        # unpredictable, and is exactly what made this suite flaky
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+
     def run_tui(self, rows, cols, shrink_to=None, term="xterm-256color"):
         """Start the TUI, optionally resize it, quit, and return its output."""
         main, sub = pty.openpty()
         fcntl.ioctl(sub, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
-        home = os.environ.get("HOME", "/tmp")
         child = subprocess.Popen(
             [sys.executable, "-m", "agent_ps"], stdin=sub, stdout=sub, stderr=sub,
-            cwd=ROOT, env=dict(os.environ, TERM=term, HOME=home))
+            cwd=ROOT, env=dict(os.environ, TERM=term, HOME=self.home))
         os.close(sub)
 
         def pump(seconds):

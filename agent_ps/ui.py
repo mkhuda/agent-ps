@@ -32,11 +32,14 @@ AGENT_COLOURS = (
     curses.COLOR_WHITE,
 )
 
-#: A basic terminal has only seven usable colours, and the eighth agent would
-#: have worn the first one's. A terminal offering 256 has room for more without
-#: disturbing the first seven, which people have already learned. The first of
-#: these is the blue Antigravity is branded in, since it lands on that slot.
+#: A terminal offering 256 colours has room for more without disturbing the
+#: first seven, which people have already learned. The first of these is the
+#: blue Antigravity is branded in, since it lands on that slot.
 EXTRA_COLOURS = (69, 208, 141, 84, 173, 205)
+
+#: Attributes that set an agent apart from an earlier one wearing the same
+#: colour, tried in order as the colours run out a second time.
+EXTRA_WEIGHT = (curses.A_UNDERLINE, curses.A_REVERSE)
 
 
 def agent_label(row):
@@ -110,12 +113,22 @@ COLUMNS = [
 ]
 
 
-def _agent_colour(index):
+def _agent_style(index):
+    """A colour, and an attribute that sets it apart from an earlier repeat.
+
+    A basic terminal has seven usable colours, and an eighth agent wearing the
+    first one's is not a hypothetical past this point in the registry. On a
+    256-colour terminal it gets a colour of its own instead; on anything
+    smaller, the same colour with a distinguishing attribute.
+    """
     if index < len(AGENT_COLOURS):
-        return AGENT_COLOURS[index]
+        return AGENT_COLOURS[index], curses.A_BOLD
     if curses.COLORS >= 256:
-        return EXTRA_COLOURS[(index - len(AGENT_COLOURS)) % len(EXTRA_COLOURS)]
-    return AGENT_COLOURS[index % len(AGENT_COLOURS)]
+        colour = EXTRA_COLOURS[(index - len(AGENT_COLOURS)) % len(EXTRA_COLOURS)]
+        return colour, curses.A_BOLD
+    generation = index // len(AGENT_COLOURS)
+    weight = EXTRA_WEIGHT[(generation - 1) % len(EXTRA_WEIGHT)]
+    return AGENT_COLOURS[index % len(AGENT_COLOURS)], curses.A_BOLD | weight
 
 
 def column_span(label):
@@ -153,6 +166,26 @@ SORTS = (
     ("uptime", "UPTIME", lambda r: r["uptime"], True),
     ("session", "SESSION", _text("name"), False),
     ("title", "TITLE", _text("title"), False),
+)
+
+#: Everything the key bar has no room for, and every key not in it at all.
+#: Doubles as the documentation for keys that never appear on screen otherwise.
+HELP = (
+    ("up, down, j, K", "move the selection"),
+    ("home, end", "jump to the first or last row"),
+    ("enter", "details for a live session, or reopen an ended one"),
+    ("s", "cycle the sort column"),
+    ("S", "reverse the sort direction"),
+    ("k", "stop the selected process and its children"),
+    ("b", "stop every background helper"),
+    ("p", "remove what an ended session left behind"),
+    ("e", "show or hide ended sessions"),
+    ("/", "filter by session, title, agent, model, directory, or pid"),
+    ("esc", "leave filter mode, or close a panel"),
+    ("space", "pause refreshing"),
+    ("r", "refresh now"),
+    ("y, n", "answer a confirmation"),
+    ("q", "quit"),
 )
 
 
@@ -209,8 +242,7 @@ class Tui:
     C_BACKGROUND = 3
     C_SELECTED = 4
     C_WARNING = 5
-    C_SORT = 6
-    C_AGENT_BASE = 7
+    C_AGENT_BASE = 6
 
     def __init__(self, screen, snapshot):
         self.screen = screen
@@ -223,8 +255,10 @@ class Tui:
         self.show_ended = False
         self.filter_text = ""
         self.editing_filter = False
-        # (question, action), so one y/n path serves every destructive key
+        # (verb, detail, action): the verb and [y]/[n] must survive truncation,
+        # so the detail that may not fit comes last
         self.pending = None
+        self.show_help = False
         self.detail = None
         self.sort = 0
         self.descending = True
@@ -254,6 +288,15 @@ class Tui:
             pass
         self.agent_colour = {}
         if not curses.has_colors():
+            # attributes work on every terminal, so they are the mechanism and
+            # colour, below, is only ever an enhancement on top of them
+            self.style = {
+                "header": curses.A_REVERSE,
+                "busy": curses.A_BOLD,
+                "background": curses.A_DIM,
+                "selected": curses.A_REVERSE | curses.A_BOLD,
+                "warning": curses.A_BOLD | curses.A_UNDERLINE,
+            }
             self.screen.timeout(200)
             return
         curses.start_color()
@@ -263,14 +306,18 @@ class Tui:
         curses.init_pair(self.C_BACKGROUND, curses.COLOR_BLUE, -1)
         curses.init_pair(self.C_SELECTED, curses.COLOR_BLACK, curses.COLOR_CYAN)
         curses.init_pair(self.C_WARNING, curses.COLOR_YELLOW, -1)
-        # the heading row is black on white, so the sorted column needs its own
-        # background. Cyan rather than yellow, because a light terminal theme
-        # renders a yellow background close enough to white to disappear.
-        curses.init_pair(self.C_SORT, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        self.style = {
+            "header": curses.color_pair(self.C_HEADER),
+            "busy": curses.color_pair(self.C_BUSY),
+            "background": curses.color_pair(self.C_BACKGROUND),
+            "selected": curses.color_pair(self.C_SELECTED),
+            "warning": curses.color_pair(self.C_WARNING),
+        }
         for index, name in enumerate(backends.names()):
+            colour, attr = _agent_style(index)
             pair = self.C_AGENT_BASE + index
-            curses.init_pair(pair, _agent_colour(index), -1)
-            self.agent_colour[name] = curses.color_pair(pair)
+            curses.init_pair(pair, colour, -1)
+            self.agent_colour[name] = curses.color_pair(pair) | attr
         self.screen.timeout(200)
 
     def poll(self):
@@ -351,15 +398,20 @@ class Tui:
             self.draw_too_small(height, width)
             return
         self.draw_summary(width)
+        if self.show_help:
+            self.draw_help(height, width)
+            self.screen.noutrefresh()
+            curses.doupdate()
+            return
         if self.detail and not self.pending:
             self.draw_detail(height, width)
             self.screen.noutrefresh()
             curses.doupdate()
             return
 
-        self.screen.attron(curses.color_pair(self.C_HEADER))
+        self.screen.attron(self.style["header"])
         self._put(2, 0, format_header(width).ljust(width - 1), width - 1)
-        self.screen.attroff(curses.color_pair(self.C_HEADER))
+        self.screen.attroff(self.style["header"])
         self.mark_sorted_column(width)
 
         body = max(1, height - 5)
@@ -367,14 +419,14 @@ class Tui:
         for index, row in enumerate(self.rows[first: first + body]):
             line = format_row(row, width - 1)
             if first + index == self.cursor:
-                attr = curses.color_pair(self.C_SELECTED)
+                attr = self.style["selected"]
                 line = line.ljust(width - 1)
             elif row["kind"] == KIND_ENDED:
                 attr = curses.A_DIM
             elif row["background"]:
-                attr = curses.color_pair(self.C_BACKGROUND)
+                attr = self.style["background"]
             elif row["status"] == STATUS_BUSY:
-                attr = curses.color_pair(self.C_BUSY)
+                attr = self.style["busy"]
             else:
                 attr = curses.A_NORMAL
             screen_row = 3 + index
@@ -385,7 +437,7 @@ class Tui:
                 self.paint_agent(screen_row, row, width, attr)
 
         if not self.rows:
-            self._put(4, 2, "No coding agent sessions running.", width - 3)
+            self._put(4, 2, self.empty_message(), width - 3)
 
         self.draw_footer(height, width)
         self.screen.noutrefresh()
@@ -406,14 +458,16 @@ class Tui:
             return
         text = agent_label(row)[: size - 1].ljust(size)
         self._put(screen_row, start, text, min(size, width - 1 - start),
-                            colour | (base & curses.A_DIM) | curses.A_BOLD)
+                            colour | (base & curses.A_DIM))
 
     def mark_sorted_column(self, width):
         """Show which column is sorting, on the column itself.
 
         A word in the summary line says the same thing, but the eye reading a
         table looks at the table, so the marker belongs in the heading it
-        describes.
+        describes. Bold and underlined on top of the header's own colour,
+        rather than a colour of its own: a pair distinct from the header would
+        have needed a background too, and the closest free one is the cursor's.
         """
         label = SORTS[self.sort][1]
         if not label:
@@ -426,7 +480,7 @@ class Tui:
         cell = size or len(label) + 1
         text = f"{label}{arrow}"[:cell].ljust(cell)
         self._put(2, start, text, min(cell, width - 1 - start),
-                            curses.color_pair(self.C_SORT) | curses.A_BOLD)
+                            self.style["header"] | curses.A_BOLD | curses.A_UNDERLINE)
 
     def detail_groups(self, row, backend):
         """Everything known about one session, in the order it gets asked.
@@ -438,7 +492,7 @@ class Tui:
             ("agent", agent_label(row), self.agent_colour.get(row["agent"], 0)),
             ("session", row["session_id"] or "not matched to a session", 0),
             ("status", status_label(row),
-             curses.color_pair(self.C_BUSY) if row["status"] == STATUS_BUSY else 0),
+             self.style["busy"] if row["status"] == STATUS_BUSY else 0),
             ("model", row["model"] or "-", 0),
             ("title", row["title"] or "-", 0),
             ("directory", row["cwd"] or "-", 0),
@@ -451,7 +505,7 @@ class Tui:
         process.append(("last turn", idle_label(row), 0))
         if row["attach"] == ATTACH_INFERRED:
             process.append(("paired", "matched by working directory, not reported",
-                            curses.color_pair(self.C_WARNING)))
+                            self.style["warning"]))
 
         usage = []
         if row["pid"]:
@@ -481,9 +535,9 @@ class Tui:
         row = self.detail
         backend = self.snapshot.find_backend(row["agent"])
 
-        self.screen.attron(curses.color_pair(self.C_HEADER))
+        self.screen.attron(self.style["header"])
         self._put(2, 0, " session details".ljust(width - 1), width - 1)
-        self.screen.attroff(curses.color_pair(self.C_HEADER))
+        self.screen.attroff(self.style["header"])
 
         screen_row = 4
         for heading, entries in self.detail_groups(row, backend):
@@ -516,7 +570,7 @@ class Tui:
         if row["pid"]:
             keys += "   k stop this process"
         self._put(height - 1, 0, keys.ljust(width - 1), width - 1,
-                            curses.color_pair(self.C_HEADER))
+                            self.style["header"])
 
     def draw_too_small(self, height, width):
         """Say why the table is gone, rather than drawing a broken one."""
@@ -527,6 +581,22 @@ class Tui:
                 self._put(offset, 0, text, max(0, width - 1))
         self.screen.noutrefresh()
         curses.doupdate()
+
+    def draw_help(self, height, width):
+        """Every key, for the ones the footer had no room to name."""
+        self.screen.attron(self.style["header"])
+        self._put(2, 0, " keys".ljust(width - 1), width - 1)
+        self.screen.attroff(self.style["header"])
+        screen_row = 4
+        for key, meaning in HELP:
+            if screen_row >= height - 2:
+                break
+            self._put(screen_row, 4, f"{key:<16}", min(16, max(0, width - 5)),
+                                curses.A_BOLD)
+            self._put(screen_row, 21, meaning, max(0, width - 22))
+            screen_row += 1
+        self._put(height - 1, 0, " press any key to close".ljust(width - 1),
+                            width - 1, self.style["header"])
 
     def draw_summary(self, width):
         """Two lines: what is running, then what it is costing."""
@@ -569,7 +639,22 @@ class Tui:
         if note:
             column = min(len(line) + 3, width - 2)
             self._put(1, column, note, max(0, width - column - 1),
-                                curses.color_pair(self.C_WARNING))
+                                self.style["warning"])
+
+    def empty_message(self):
+        """Why the table has nothing in it, which is not always the same why.
+
+        A filter that matched nothing and no agent being found look identical
+        as an empty table; only the message tells them apart.
+        """
+        if self.filter_text:
+            return f"No rows match /{self.filter_text}. Press esc to clear the filter."
+        ended = self.history["ended"]
+        if not self.show_ended and ended:
+            return (f"No sessions running. {ended} ended session"
+                    f"{'s' if ended != 1 else ''} on record, press e to show them.")
+        return ("No coding agent sessions found. "
+                "Run `agent-ps agents` to see what was detected.")
 
     def advisory(self):
         """One short note when something on screen deserves attention.
@@ -606,25 +691,49 @@ class Tui:
         if self.editing_filter:
             prompt = f" filter: {self.filter_text}"
             self._put(height - 1, 0, prompt.ljust(width - 1), width - 1,
-                                curses.color_pair(self.C_SELECTED))
+                                self.style["selected"])
             return
         if self.pending:
-            text = f" {self.pending[0]}  [y] confirm  [n] cancel"
+            verb, detail, _ = self.pending
+            # the answer keys must survive truncation, so they come first and
+            # the detail, which can run long, is what gets cut on a narrow screen
+            prefix = f" [y] {verb}   [n] cancel"
+            room = width - 1 - len(prefix) - 3
+            text = f"{prefix}   {detail[:room]}" if detail and room > 0 else prefix
             self._put(height - 1, 0, text.ljust(width - 1), width - 1,
-                                curses.color_pair(self.C_WARNING))
+                                self.style["warning"])
             return
         # the note and the legend share a line: a note is worth interrupting the
         # legend for, and it is gone again in a few seconds
         if self.message and time.time() - self.message_at < MESSAGE_SECONDS:
             self._put(height - 2, 0, f" {self.message}", width - 1,
-                                curses.color_pair(self.C_WARNING))
+                                self.style["warning"])
         else:
             self.draw_legend(height - 2, width)
-        mode = "hide ended" if self.show_ended else "show ended"
-        keys = (" up/down   enter details   k stop   b background   p prune"
-                f"   e {mode}   s sort   S reverse   / filter   q quit")
+        keys = self.key_bar(width)
         self._put(height - 1, 0, keys.ljust(width - 1), width - 1,
-                            curses.color_pair(self.C_HEADER))
+                            self.style["header"])
+
+    def key_bar(self, width):
+        """The bottom row, longest first so the least useful key drops first.
+
+        `q quit` is appended after fitting the rest, so a screen too narrow
+        for anything else still has an answer for how to leave.
+        """
+        mode = "hide ended" if self.show_ended else "show ended"
+        # ordered by priority: everything up to and including "e" is kept as
+        # long as there is any room at all, the rest goes as the screen narrows
+        entries = [("up/down", "move"), ("enter", "details"), ("k", "stop"),
+                  ("/", "filter"), ("s", "sort"), ("e", mode), ("?", "keys"),
+                  ("b", "background"), ("p", "prune"), ("S", "reverse")]
+        tail = "q quit"
+        while entries:
+            text = (" " + "   ".join(f"{k} {v}" for k, v in entries)
+                    + "   " + tail)
+            if len(text) <= width - 1:
+                return text
+            entries.pop()
+        return " " + tail
 
     def draw_legend(self, screen_row, width):
         """Which agents are on screen, each in its own colour.
@@ -658,14 +767,14 @@ class Tui:
             at = width - len(note) - 2
             if at > len(text) + 3:
                 self._put(screen_row, at, note, len(note),
-                                    curses.color_pair(self.C_SORT) | curses.A_BOLD)
+                                    curses.A_BOLD | curses.A_UNDERLINE)
                 break
 
         for at, agent in placed:
             if at >= width - 1:
                 continue
             self._put(screen_row, at, agent, min(len(agent), width - 1 - at),
-                                self.agent_colour.get(agent, 0) | curses.A_BOLD)
+                                self.agent_colour.get(agent, curses.A_BOLD))
 
     def confirm_kill(self, row):
         """Ask before stopping, and say where the process is.
@@ -677,11 +786,11 @@ class Tui:
         # the real process table, not the agent rows: a session's children are
         # MCP servers and helpers, which are not rows and would be orphaned
         order = collect_tree(row["pid"], children_of(proc_table()))
-        note = f" in {short_path(row['cwd'], 40)}" if row["cwd"] else ""
+        detail = short_path(row["cwd"], 40) if row["cwd"] else ""
         if row["attach"] == ATTACH_INFERRED:
-            note += ", session matched by directory"
-        self.pending = (f"Stop {len(order)} process(es){note}?",
-                        lambda: self.apply_kill(order))
+            detail += (", " if detail else "") + "matched by directory"
+        verb = f"stop {len(order)} process" + ("es" if len(order) != 1 else "")
+        self.pending = (verb, detail, lambda: self.apply_kill(order))
 
     def confirm_prune(self, row):
         """Ask before removing what an ended session left behind.
@@ -705,10 +814,10 @@ class Tui:
             return
         total = sum(size for _, _, size in parts)
         labels = sorted({label for label, _, _ in parts})
-        self.pending = (
-            f"Remove {human_bytes(total)} of {', '.join(labels)} from "
-            f"{short_path(name, 24)}? The transcript is kept.",
-            lambda: self.apply_prune(row, parts))
+        verb = f"remove {human_bytes(total)}"
+        detail = (f"{', '.join(labels)} from {short_path(name, 24)}, "
+                  f"transcript kept")
+        self.pending = (verb, detail, lambda: self.apply_prune(row, parts))
 
     def apply_prune(self, row, parts):
         self.detail = None
@@ -767,13 +876,17 @@ class Tui:
         if self.editing_filter:
             return self.handle_filter(key)
 
-        # moving around means the last result has been read, so drop the note
-        # early rather than leaving it to time out under a different row
         if key == curses.KEY_RESIZE:
             curses.update_lines_cols()
             self.cursor = max(0, min(self.cursor, len(self.rows) - 1))
             return True
 
+        if self.show_help:
+            self.show_help = False
+            return True
+
+        # moving around means the last result has been read, so drop the note
+        # early rather than leaving it to time out under a different row
         if key in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_HOME, curses.KEY_END,
                    ord("j"), ord("K")):
             self.message = ""
@@ -789,7 +902,7 @@ class Tui:
 
         if self.pending:
             if key in (ord("y"), ord("Y")):
-                action = self.pending[1]
+                action = self.pending[2]
                 self.pending = None
                 action()
             elif key in (ord("n"), ord("N"), 27):
@@ -828,6 +941,8 @@ class Tui:
             self.poll()
         elif key == ord("/"):
             self.editing_filter = True
+        elif key == ord("?"):
+            self.show_help = True
         elif key == ord("k"):
             row = self.selected()
             if row and row["pid"]:
@@ -843,8 +958,9 @@ class Tui:
         elif key in (ord("b"), ord("B")):
             background = [r["pid"] for r in self.rows if r["background"]]
             if background:
-                self.pending = (f"Stop {len(background)} background process(es)?",
-                                lambda: self.apply_kill(background))
+                verb = ("stop " + str(len(background)) + " background process"
+                        + ("es" if len(background) != 1 else ""))
+                self.pending = (verb, "", lambda: self.apply_kill(background))
             else:
                 self.notify("No background processes.")
         return True
