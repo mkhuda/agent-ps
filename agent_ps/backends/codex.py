@@ -54,22 +54,42 @@ class CodexBackend(Backend):
                 info["model"] = payload["model"]
                 break
         info["title"] = self._opening_prompt(reader)
-        info["status"] = self._turn(reader)
+        status, code, text = self._last_turn(reader)
+        info["status"] = status
+        if code:
+            info["error_code"] = code
+            info["error_text"] = text
         return info
 
     @staticmethod
-    def _turn(reader):
-        """Codex marks the start and end of a turn itself, so read the marker."""
-        for line in reader.tail():
+    def _last_turn(reader):
+        """Status and failure of the newest turn, from the same marker.
+
+        A failure that stands on its own, rather than inside task_complete's
+        own `error`, is always the line immediately before it: codex writes
+        the two back to back with nothing in between.
+        """
+        lines = reader.tail()
+        for index, line in enumerate(lines):
             if '"task_started"' not in line and '"task_complete"' not in line:
                 continue
             entry = jsonl.parse_line(line)
-            kind = ((entry or {}).get("payload") or {}).get("type")
+            payload = (entry or {}).get("payload") or {}
+            kind = payload.get("type")
             if kind == "task_started":
-                return STATUS_BUSY
+                return STATUS_BUSY, "", ""
             if kind == "task_complete":
-                return STATUS_IDLE
-        return ""
+                error = payload.get("error")
+                if not isinstance(error, dict) and index + 1 < len(lines):
+                    prior = jsonl.parse_line(lines[index + 1])
+                    prior_payload = (prior or {}).get("payload") or {}
+                    if prior_payload.get("type") == "error":
+                        error = prior_payload
+                if isinstance(error, dict):
+                    return (STATUS_IDLE, error.get("codex_error_info") or "error",
+                           error.get("message", ""))
+                return STATUS_IDLE, "", ""
+        return "", "", ""
 
     @staticmethod
     def _opening_prompt(reader):

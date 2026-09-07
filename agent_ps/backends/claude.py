@@ -36,8 +36,9 @@ class ClaudeBackend(Backend):
 
     def extract(self, reader):
         info = {"cwd": reader.find_head("cwd")}
+        checked_last_turn = False
         for line in reader.tail():
-            if info.get("title") and info.get("model"):
+            if info.get("title") and info.get("model") and checked_last_turn:
                 break
             if '"ai-title"' not in line and '"model"' not in line:
                 continue
@@ -47,12 +48,25 @@ class ClaudeBackend(Backend):
                 continue
             if not info.get("title") and entry.get("type") == "ai-title":
                 info["title"] = entry.get("aiTitle", "")
+                continue
+            if entry.get("type") != "assistant" or entry.get("isSidechain"):
+                continue
             if not info.get("model"):
                 model = (entry.get("message") or {}).get("model")
                 # <synthetic> marks messages Claude Code wrote itself, such as
                 # compaction notices, not a model that served a turn
                 if model and not model.startswith("<"):
                     info["model"] = model
+            if not checked_last_turn:
+                # the newest non-sidechain turn is the session's current state:
+                # an error here means nothing has succeeded since, and an error
+                # further back was already retried past and is not news
+                checked_last_turn = True
+                if entry.get("isApiErrorMessage"):
+                    info["error_code"] = entry.get("error") or "error"
+                    content = (entry.get("message") or {}).get("content")
+                    if isinstance(content, list) and content and isinstance(content[0], dict):
+                        info["error_text"] = content[0].get("text", "")
         return info
 
     def fallback_cwd(self, path):

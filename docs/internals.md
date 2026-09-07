@@ -129,6 +129,46 @@ that tool ran rather than to the turn holding it. It is left out, since it is
 spend of its own and would otherwise land on whichever session happened to
 launch it.
 
+## The last error, and why only the newest one counts
+
+Claude Code, Codex CLI and OpenCode each mark a turn that failed rather than
+finished, in their own shape:
+
+| Agent | Written at | Shape |
+|---|---|---|
+| Claude Code | `isApiErrorMessage` plus a taxonomy in `error`, on the turn itself | per turn |
+| Codex CLI | `payload.type == "error"`, or nested in the `task_complete` that follows it | per turn |
+| OpenCode | `error.name` and `error.data.message` on the message row | per turn |
+
+Measured against real transcripts, a session that ever logs one of these keeps
+going and succeeds afterward far more often than not: every sampled Claude Code
+session with a recorded API error had thousands of lines of ordinary work
+after it. So the question worth answering is never "did this ever fail",
+only "is the newest turn a failure with nothing after it", which is read the
+same way busy and idle are: from the end of the log, stopping at the first
+turn that counts. A recovered error is not reported at all.
+
+Codex writes the failure as two adjacent lines rather than one, a standalone
+`error` event immediately followed by the `task_complete` that closes the
+turn, with the error only sometimes carried inside the second. Reading the
+newest `task_complete` and, when it has no error of its own, the line
+immediately before it, covers both shapes: measured across the sessions this
+was built against, the two are always adjacent, with nothing else written
+between them.
+
+Claude Code also marks a subagent turn as its own, separate entry
+(`isSidechain: true`). An error there belongs to the Task tool call that ran
+it, not to the conversation, and is skipped when looking for the newest turn.
+
+**What this cannot see.** All three shapes belong to the agent's own request
+path. A session pointed at a custom `ANTHROPIC_BASE_URL` or an equivalent
+proxy can fail in a way the agent never wraps in its usual error format at
+all: verified against a live session routed through a local gateway that had
+just hit a rate limit, the transcript recorded nothing whatsoever, not even a
+malformed attempt, and the session simply reported itself idle. Where the
+failure happens outside the agent's own view of the request, it leaves nothing
+to read.
+
 ## Disk usage
 
 A session writes more than its log, and the log is often the smaller half. The

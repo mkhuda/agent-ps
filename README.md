@@ -228,14 +228,22 @@ A `paired` line appears when the session was matched to the process by working
 directory rather than reported, so you know before pressing `k` that the pairing
 is a guess.
 
-Enter on an ended session reopens it in a new terminal tab instead. Copilot
-chats reopen in the editor.
+A `last error` line appears when the newest turn failed and nothing has
+succeeded since: a rate limit, an auth failure, a server error. Claude Code,
+Codex CLI and OpenCode report this; going through a custom `ANTHROPIC_BASE_URL`
+or similar proxy, a failure there is invisible to the transcript and so
+invisible here too, and the session just goes quiet.
+
+Enter on an ended session asks before reopening it in a new terminal tab, since
+the session can start spending the moment it opens. Copilot chats reopen in
+the editor.
 
 ### The advisory line
 
-A line above the keys points out whatever is worth a look: background helpers
-left running, sessions untouched for a day, or ended sessions you could resume.
-It names the key that acts on it, and shows one thing at a time.
+A line above the keys points out whatever is worth a look: a live session that
+just hit an API error, background helpers left running, sessions untouched for
+a day, or ended sessions you could resume. It names the key that acts on it
+where there is one, and shows one thing at a time.
 
 ## Scripting
 
@@ -381,7 +389,7 @@ install fetches. The build is reproducible: the same source always produces the
 same bytes, so the committed executable can be checked against the tree.
 
 ```
-03cc2271187211d38e27773db9067a2a71c5a7055d6776c5d85df178f58f4d0c  agent-ps
+9f5c42aeb1fe52ed69781731bcfb6c945b028e81f7067122ec925e2451f1a0ca  agent-ps
 ```
 
 Adding an agent takes one class and one line in the registry. See

@@ -559,3 +559,155 @@ class HelpOverlay(unittest.TestCase):
         documented = " ".join(k for k, _ in HELP)
         for key in ("k", "b", "p", "e", "s", "S", "/", "q", "space", "r"):
             self.assertIn(key, documented)
+
+
+class ErrorAdvisory(unittest.TestCase):
+    def line(self, rows):
+        made = Tui.__new__(Tui)
+        made.rows = rows
+        made.history = {"bytes": 0, "ended": 0, "recent": 0, "spare": 0,
+                        "spare_sessions": 0}
+        made.show_ended = False
+        return made.advisory()
+
+    def test_one_live_errored_session_names_the_code(self):
+        r = row(agent="codex", pid=123, error_code="unauthorized")
+        said = self.line([r])
+        self.assertIn("codex", said)
+        self.assertIn("unauthorized", said)
+
+    def test_several_errored_sessions_are_counted(self):
+        rows = [row(pid=1, error_code="rate_limit"), row(pid=2, error_code="server_error")]
+        said = self.line(rows)
+        self.assertIn("2", said)
+
+    def test_an_ended_sessions_error_does_not_page_the_advisory(self):
+        # its process is gone; the detail panel is where this belongs
+        r = row(error_code="rate_limit", pid=0, kind=KIND_ENDED)
+        self.assertEqual(self.line([r]), "")
+
+    def test_a_recovered_session_says_nothing(self):
+        self.assertEqual(self.line([row(pid=1, error_code="")]), "")
+
+    def test_it_outranks_background_helpers_and_stale_sessions(self):
+        errored = row(pid=1, error_code="rate_limit")
+        orphan = row(agent="hermes", pid=2, background=True, uptime=7200)
+        said = self.line([errored, orphan])
+        self.assertIn("rate_limit", said)
+
+
+class ErrorInDetail(unittest.TestCase):
+    class Backend:
+        prunable = ()
+        def disk_breakdown(self, session_id, path): return []
+        def details(self, row): return []
+
+    def process_group(self, r):
+        with mock.patch.object(curses, "color_pair", lambda n: 0):
+            made = Tui.__new__(Tui)
+            made.agent_colour = {}
+            made.style = {"warning": 1, "busy": 0}
+            groups = dict(made.detail_groups(r, self.Backend()))
+        return groups["process"]
+
+    def test_a_current_error_appears_next_to_last_turn(self):
+        r = row(error_code="rate_limit", error_text="429 Too Many Requests")
+        labels = [label for label, _, _ in self.process_group(r)]
+        self.assertIn("last error", labels)
+        value = next(v for l, v, _ in self.process_group(r) if l == "last error")
+        self.assertIn("rate_limit", value)
+        self.assertIn("429 Too Many Requests", value)
+
+    def test_no_line_when_there_is_nothing_to_report(self):
+        labels = [label for label, _, _ in self.process_group(row(error_code=""))]
+        self.assertNotIn("last error", labels)
+
+
+class ResumeDebounce(unittest.TestCase):
+    """Opening a terminal is slow; a second Enter on the same row must not
+    open a second one before the first has had a chance to land."""
+
+    class Backend:
+        resume_binary = "claude"
+
+    def tui(self):
+        made = Tui.__new__(Tui)
+        made.resuming = None
+        made.pending = None
+        made.detail = None
+        made.message = ""
+        made.message_at = 0
+        made.snapshot = type("S", (), {"find_backend": lambda self, name: ResumeDebounce.Backend()})()
+        made.draw = lambda: None  # no real screen in these tests
+        return made
+
+    def row(self, session_id="s1", agent="claude", title="a session"):
+        return dict(blank_row(agent), session_id=session_id, title=title, kind=KIND_ENDED)
+
+    def confirm(self, made, row):
+        """Enter, then y: the same two steps a person presses at the keyboard."""
+        made.confirm_resume(row)
+        self.assertIsNotNone(made.pending, "resume must ask before it opens anything")
+        action = made.pending[2]
+        made.pending = None
+        action()
+
+    def test_asking_alone_opens_nothing(self):
+        with mock.patch.object(ui, "resume_command", return_value="cmd"), \
+             mock.patch.object(ui, "open_in_terminal", return_value=(True, "Opened.")) as opened:
+            made = self.tui()
+            made.confirm_resume(self.row())
+            self.assertEqual(opened.call_count, 0)
+
+    def test_the_question_names_the_session(self):
+        made = self.tui()
+        made.confirm_resume(self.row(title="wire the retry budget"))
+        verb, detail, _ = made.pending
+        self.assertIn("wire the retry budget", verb)
+
+    def test_confirming_opens_it(self):
+        with mock.patch.object(ui, "resume_command", return_value="cmd"), \
+             mock.patch.object(ui, "open_in_terminal", return_value=(True, "Opened.")) as opened:
+            made = self.tui()
+            self.confirm(made, self.row())
+            self.assertEqual(opened.call_count, 1)
+
+    def test_a_stray_enter_during_the_slow_open_asks_nothing_new(self):
+        # the confirmation only guards the first Enter; this is what protects
+        # the window while open_in_terminal is still running
+        with mock.patch.object(ui, "resume_command", return_value="cmd"), \
+             mock.patch.object(ui, "open_in_terminal", return_value=(True, "Opened.")) as opened:
+            made = self.tui()
+            self.confirm(made, self.row())
+            made.confirm_resume(self.row())
+            self.assertIsNone(made.pending, "a second Enter must not ask again mid-open")
+            self.assertEqual(opened.call_count, 1)
+            self.assertIn("Already reopening", made.message)
+
+    def test_a_different_session_is_not_debounced(self):
+        with mock.patch.object(ui, "resume_command", return_value="cmd"), \
+             mock.patch.object(ui, "open_in_terminal", return_value=(True, "Opened.")) as opened:
+            made = self.tui()
+            self.confirm(made, self.row(session_id="s1"))
+            self.confirm(made, self.row(session_id="s2"))
+            self.assertEqual(opened.call_count, 2)
+
+    def test_the_debounce_expires(self):
+        with mock.patch.object(ui, "resume_command", return_value="cmd"), \
+             mock.patch.object(ui, "open_in_terminal", return_value=(True, "Opened.")) as opened:
+            made = self.tui()
+            self.confirm(made, self.row())
+            made.resuming = (made.resuming[0], made.resuming[1] - Tui.RESUME_DEBOUNCE - 1)
+            self.confirm(made, self.row())
+            self.assertEqual(opened.call_count, 2)
+
+    def test_the_screen_shows_opening_before_the_slow_call(self):
+        order = []
+        made = self.tui()
+        made.draw = lambda: order.append("draw")
+        with mock.patch.object(ui, "resume_command", return_value="cmd"), \
+             mock.patch.object(ui, "open_in_terminal",
+                              side_effect=lambda c: order.append("open") or (True, "Opened.")):
+            self.confirm(made, self.row())
+        self.assertEqual(order, ["draw", "open"])
+        self.assertNotIn("Opening in a new tab", made.message)  # overwritten by the result

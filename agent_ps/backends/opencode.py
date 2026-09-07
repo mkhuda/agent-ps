@@ -48,35 +48,49 @@ class OpenCodeBackend(SqliteBackend):
             "SELECT id, directory, title, model, time_updated "
             "FROM session ORDER BY time_updated DESC",
             limit,
-            lambda r: {
-                "session_id": r["id"],
-                "title": r["title"] or "",
-                "model": _model_name(r["model"]),
-                "cwd": r["directory"] or "",
-                "last_active": (r["time_updated"] or 0) / 1000.0,
-                "status": self._turn(r["id"]),
-                "disk": self._session_bytes(r["id"]),
-            })
+            self._row)
 
-    def _turn(self, session_id):
-        """Whose turn it is, from the newest message.
+    def _row(self, r):
+        status, code, text = self._last_turn(r["id"])
+        row = {
+            "session_id": r["id"],
+            "title": r["title"] or "",
+            "model": _model_name(r["model"]),
+            "cwd": r["directory"] or "",
+            "last_active": (r["time_updated"] or 0) / 1000.0,
+            "status": status,
+            "disk": self._session_bytes(r["id"]),
+        }
+        if code:
+            row["error_code"] = code
+            row["error_text"] = text
+        return row
 
-        An assistant message carries a `finish` reason once its turn is over, so
-        one without it is still being written.
+    def _last_turn(self, session_id):
+        """Status and failure of the newest message, read once for both.
+
+        An assistant message carries a `finish` reason once its turn is over,
+        and an `error` object instead of one when the turn failed rather than
+        finished.
         """
         found = self.query("SELECT data FROM message WHERE session_id = ? "
                            "ORDER BY time_created DESC LIMIT 1", (session_id,))
         if not found:
-            return ""
+            return "", "", ""
         try:
             data = json.loads(found[0]["data"])
         except ValueError:
-            return ""
+            return "", "", ""
+        error = data.get("error")
+        if isinstance(error, dict):
+            inner = error.get("data")
+            text = inner.get("message", "") if isinstance(inner, dict) else ""
+            return STATUS_IDLE, error.get("name") or "error", text
         if data.get("role") == "user":
-            return STATUS_BUSY
+            return STATUS_BUSY, "", ""
         if data.get("role") == "assistant":
-            return STATUS_IDLE if data.get("finish") else STATUS_BUSY
-        return ""
+            return (STATUS_IDLE if data.get("finish") else STATUS_BUSY), "", ""
+        return "", "", ""
 
     def _session_bytes(self, session_id):
         """What one session holds in the database, rather than on its own."""

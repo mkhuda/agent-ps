@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.0
+
+Sessions now say when their last turn hit a rate limit, an auth failure, or a
+server error.
+
+- Claude Code, Codex CLI and OpenCode each mark a failed turn in their own
+  shape, and a `last error` line appears in the detail panel when the newest
+  turn failed and nothing has succeeded since. An error a session already
+  recovered from is not shown at all: measured against real transcripts, a
+  session that ever logs one almost always keeps going afterward, so only the
+  newest turn's outcome is worth reporting.
+- The advisory line points at a live session that just hit one, ahead of
+  background helpers and stale sessions.
+- Not covered: a session routed through a custom `ANTHROPIC_BASE_URL` or
+  similar proxy can fail in a way the agent never logs at all. Verified
+  against a live session that had just hit a rate limit through a local
+  gateway: the transcript recorded nothing, and the session simply went idle.
+- Enter on an ended session now asks before reopening it, since the new
+  session can start spending the moment it opens and a resume could not be
+  undone by closing the tab. Confirming still says so before the terminal
+  actually opens, since that can take a few seconds and gave no sign anything
+  had happened, and a stray key while it is opening no longer asks again or
+  opens a second tab racing the first.
+
 ## 0.6.4
 
 Terminals without colour now actually degrade instead of losing the cursor.

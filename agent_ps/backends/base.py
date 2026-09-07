@@ -90,6 +90,10 @@ def blank_row(agent):
         "disk": 0,
         "attach": ATTACH_NONE,
         "status": "",
+        # set only when the session's most recent turn failed and nothing has
+        # succeeded since; an error recovered from is not reported at all
+        "error_code": "",
+        "error_text": "",
     }
 
 
@@ -172,6 +176,8 @@ class Backend:
             "name": os.path.basename(cwd) if cwd else "",
             "last_active": info.get("last_active", 0),
             "status": info.get("status", ""),
+            "error_code": info.get("error_code", ""),
+            "error_text": info.get("error_text", ""),
             "disk": self.disk_usage(session_id, path),
         })
         return row

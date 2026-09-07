@@ -263,6 +263,9 @@ class Tui:
         self.sort = 0
         self.descending = True
         self.last_poll = 0.0
+        # opening a terminal can take a few seconds, so a second Enter on the
+        # same row before it returns must not open a second one
+        self.resuming = None
         self.all_rows = []
         self.history = {"bytes": 0, "ended": 0, "recent": 0, "spare": 0,
                         "spare_sessions": 0}
@@ -503,6 +506,12 @@ class Tui:
             process.append(("pid", f"{row['pid']}  (parent {row['ppid']})", 0))
             process.append(("uptime", human_duration(row["uptime"]), 0))
         process.append(("last turn", idle_label(row), 0))
+        if row["error_code"]:
+            # only ever set when nothing has succeeded since, so this is the
+            # session's current state rather than something it already recovered from
+            text = f"{row['error_code']}: {row['error_text']}" if row["error_text"] \
+                else row["error_code"]
+            process.append(("last error", text, self.style["warning"]))
         if row["attach"] == ATTACH_INFERRED:
             process.append(("paired", "matched by working directory, not reported",
                             self.style["warning"]))
@@ -667,6 +676,15 @@ class Tui:
         # else this line could report
         if FAILURES:
             return f"could not run {', '.join(sorted(FAILURES))}; rows may be missing"
+
+        # a live session whose last turn failed explains a table that looks
+        # idle when it is actually stuck, which is worth knowing before
+        # anything about background helpers or old memory
+        errored = [r for r in self.rows if r["pid"] and r["error_code"]]
+        if errored:
+            if len(errored) == 1:
+                return f"{errored[0]['agent']} session hit {errored[0]['error_code']}"
+            return f"{len(errored)} session(s) hit an API error"
 
         orphans = [r for r in self.rows if r["background"] and r["uptime"] > 3600]
         if orphans:
@@ -849,16 +867,42 @@ class Tui:
         if is_live(row):
             self.detail = row
             return
-        self.resume_selected(row)
+        self.confirm_resume(row)
 
-    def resume_selected(self, row):
+    #: How long a row stays debounced after a resume, matching the outer bound
+    #: of open_in_terminal's own timeout: the whole slow call fits inside it.
+    RESUME_DEBOUNCE = 10.0
+
+    def confirm_resume(self, row):
+        """Ask before reopening: the new session can start spending at once.
+
+        Everything that would make the resume pointless or wrong is checked
+        up front, so the question is only ever asked when it can actually be
+        answered yes: a resume that cannot proceed is reported directly rather
+        than offered and then failing.
+        """
         if not row["session_id"]:
             self.notify("No session id for that row.")
+            return
+        identity = (row["agent"], row["session_id"])
+        if self.resuming and self.resuming[0] == identity \
+                and time.time() - self.resuming[1] < self.RESUME_DEBOUNCE:
+            self.notify("Already reopening that session.")
             return
         backend = self.snapshot.find_backend(row["agent"])
         if not backend or not backend.resume_binary:
             self.notify(f"{row['agent']} sessions cannot be reopened from a terminal.")
             return
+        name = row["title"] or row["name"] or row["session_id"]
+        self.pending = (f"reopen {short_path(name, 40)}", "",
+                        lambda: self.apply_resume(row, backend, identity))
+
+    def apply_resume(self, row, backend, identity):
+        self.resuming = (identity, time.time())
+        # opening a terminal can take a few seconds, and the wait would
+        # otherwise look identical to the screen simply not having reacted
+        self.notify("Opening in a new tab...")
+        self.draw()
         command = resume_command(backend, row["session_id"], row.get("cwd", ""))
         ok, note = open_in_terminal(command)
         self.notify(note if ok else f"{note} Run: {command}")
