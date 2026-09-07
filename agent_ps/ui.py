@@ -229,10 +229,29 @@ class Tui:
         self.sort = 0
         self.descending = True
         self.last_poll = 0.0
-        self.history = {"bytes": 0, "ended": 0, "recent": 0}
+        self.all_rows = []
+        self.history = {"bytes": 0, "ended": 0, "recent": 0, "spare": 0,
+                        "spare_sessions": 0}
+
+    def _put(self, y, x, text, n, attr=0):
+        """addnstr that tolerates a screen too small for what it was told.
+
+        The bottom right cell always raises, even on correct code, and a window
+        that shrank between the layout and the draw raises everywhere.
+        """
+        if n <= 0 or y < 0 or x < 0:
+            return
+        try:
+            self.screen.addnstr(y, x, text, n, attr)
+        except curses.error:
+            pass
 
     def setup(self):
-        curses.curs_set(0)
+        # a terminal whose terminfo has no `civis` raises rather than ignoring
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
         self.agent_colour = {}
         if not curses.has_colors():
             self.screen.timeout(200)
@@ -255,9 +274,24 @@ class Tui:
         self.screen.timeout(200)
 
     def poll(self):
+        """Read the machine. Everything here touches disk or shells out."""
         # the same window already loaded to pair processes with sessions, so
         # showing all of it costs nothing and makes sorting by size honest
-        rows = self.snapshot.rows(show_ended=self.show_ended, limit=ATTACH_WINDOW)
+        self.all_rows = self.snapshot.rows(show_ended=self.show_ended,
+                                           limit=ATTACH_WINDOW)
+        self.last_poll = time.time()
+        self.history = self.snapshot.history()
+        self.reshape()
+
+    def reshape(self):
+        """Filter and sort what the last poll returned, reading nothing.
+
+        Separate from `poll` because sorting and filtering are questions about
+        rows already in hand. Asking the machine again for every keystroke cost
+        a fifth of a second each time.
+        """
+        held = self.selected()
+        rows = self.all_rows
         if self.filter_text:
             needle = self.filter_text.lower()
             rows = [r for r in rows if matches_filter(r, needle)]
@@ -265,9 +299,11 @@ class Tui:
         if key:
             rows = sorted(rows, key=key, reverse=self.descending)
         self.rows = rows
-        self.cursor = max(0, min(self.cursor, len(self.rows) - 1))
-        self.last_poll = time.time()
-        self.history = self.snapshot.history()
+        # follow the row rather than the position. Under a live sort the order
+        # changes beneath the cursor, and k acts on whatever it is now over.
+        current = self.same_row(held) if held else None
+        self.cursor = (self.rows.index(current) if current
+                       else max(0, min(self.cursor, len(self.rows) - 1)))
         # every pass builds new row objects, so a panel holding one from the
         # last pass would sit there showing the cpu and uptime it had when it
         # was opened
@@ -304,9 +340,16 @@ class Tui:
         self.message = text
         self.message_at = time.time()
 
+    #: Below this there is no layout worth attempting, only a message saying so.
+    MIN_HEIGHT = 6
+    MIN_WIDTH = 40
+
     def draw(self):
         self.screen.erase()
         height, width = self.screen.getmaxyx()
+        if height < self.MIN_HEIGHT or width < self.MIN_WIDTH:
+            self.draw_too_small(height, width)
+            return
         self.draw_summary(width)
         if self.detail and not self.pending:
             self.draw_detail(height, width)
@@ -315,7 +358,7 @@ class Tui:
             return
 
         self.screen.attron(curses.color_pair(self.C_HEADER))
-        self.screen.addnstr(2, 0, format_header(width).ljust(width - 1), width - 1)
+        self._put(2, 0, format_header(width).ljust(width - 1), width - 1)
         self.screen.attroff(curses.color_pair(self.C_HEADER))
         self.mark_sorted_column(width)
 
@@ -335,14 +378,14 @@ class Tui:
             else:
                 attr = curses.A_NORMAL
             screen_row = 3 + index
-            self.screen.addnstr(screen_row, 0, line, width - 1, attr)
+            self._put(screen_row, 0, line, width - 1, attr)
             # the cursor has to stay unmistakable, so a selected row keeps its
             # own colour rather than being broken up by the agent's
             if first + index != self.cursor:
                 self.paint_agent(screen_row, row, width, attr)
 
         if not self.rows:
-            self.screen.addnstr(4, 2, "No coding agent sessions running.", width - 3)
+            self._put(4, 2, "No coding agent sessions running.", width - 3)
 
         self.draw_footer(height, width)
         self.screen.noutrefresh()
@@ -362,7 +405,7 @@ class Tui:
         if start >= width - 1:
             return
         text = agent_label(row)[: size - 1].ljust(size)
-        self.screen.addnstr(screen_row, start, text, min(size, width - 1 - start),
+        self._put(screen_row, start, text, min(size, width - 1 - start),
                             colour | (base & curses.A_DIM) | curses.A_BOLD)
 
     def mark_sorted_column(self, width):
@@ -382,7 +425,7 @@ class Tui:
         # the last column has no fixed width, so it is marked to its own length
         cell = size or len(label) + 1
         text = f"{label}{arrow}"[:cell].ljust(cell)
-        self.screen.addnstr(2, start, text, min(cell, width - 1 - start),
+        self._put(2, start, text, min(cell, width - 1 - start),
                             curses.color_pair(self.C_SORT) | curses.A_BOLD)
 
     def detail_groups(self, row, backend):
@@ -439,21 +482,21 @@ class Tui:
         backend = self.snapshot.find_backend(row["agent"])
 
         self.screen.attron(curses.color_pair(self.C_HEADER))
-        self.screen.addnstr(2, 0, " session details".ljust(width - 1), width - 1)
+        self._put(2, 0, " session details".ljust(width - 1), width - 1)
         self.screen.attroff(curses.color_pair(self.C_HEADER))
 
         screen_row = 4
         for heading, entries in self.detail_groups(row, backend):
             if not entries or screen_row >= height - 3:
                 continue
-            self.screen.addnstr(screen_row, 2, heading.upper(), 12,
+            self._put(screen_row, 2, heading.upper(), 12,
                                 curses.A_BOLD | curses.A_DIM)
             screen_row += 1
             for label, value, attr in entries:
                 if screen_row >= height - 2:
                     break
                 if label:
-                    self.screen.addnstr(screen_row, 4, f"{label:>11}", 11,
+                    self._put(screen_row, 4, f"{label:>11}", 11,
                                         curses.A_DIM)
                 # the command line is the one field that runs long, so it wraps
                 # instead of being cut off where it stops being useful
@@ -465,15 +508,25 @@ class Tui:
                 for chunk in chunks:
                     if screen_row >= height - 2:
                         break
-                    self.screen.addnstr(screen_row, 17, chunk, width - 18, attr)
+                    self._put(screen_row, 17, chunk, width - 18, attr)
                     screen_row += 1
             screen_row += 1
 
         keys = " enter or esc close"
         if row["pid"]:
             keys += "   k stop this process"
-        self.screen.addnstr(height - 1, 0, keys.ljust(width - 1), width - 1,
+        self._put(height - 1, 0, keys.ljust(width - 1), width - 1,
                             curses.color_pair(self.C_HEADER))
+
+    def draw_too_small(self, height, width):
+        """Say why the table is gone, rather than drawing a broken one."""
+        for offset, text in enumerate((
+                "terminal too small",
+                f"{width}x{height}, need {self.MIN_WIDTH}x{self.MIN_HEIGHT}")):
+            if offset < height:
+                self._put(offset, 0, text, max(0, width - 1))
+        self.screen.noutrefresh()
+        curses.doupdate()
 
     def draw_summary(self, width):
         """Two lines: what is running, then what it is costing."""
@@ -482,7 +535,10 @@ class Tui:
         background = sum(1 for r in live if r["background"])
         sessions = len(live) - background
 
-        parts = [f"{sessions} session" + ("s" if sessions != 1 else "")]
+        if self.filter_text and len(self.rows) != len(self.all_rows):
+            parts = [f"{len(self.rows)} of {len(self.all_rows)} rows"]
+        else:
+            parts = [f"{sessions} session" + ("s" if sessions != 1 else "")]
         if busy:
             parts.append(f"{busy} busy")
         if background:
@@ -495,22 +551,24 @@ class Tui:
             state = f"/{self.filter_text}   " + state
 
         self.screen.attron(curses.A_BOLD)
-        self.screen.addnstr(0, 1, "agent-ps", width - 2)
+        self._put(0, 1, "agent-ps", width - 2)
         self.screen.attroff(curses.A_BOLD)
-        self.screen.addnstr(0, 10, f"  {'  '.join(parts)}   {state}", width - 11)
+        self._put(0, 10, f"  {'  '.join(parts)}   {state}", width - 11)
 
-        disk = sum(r.get("disk", 0) for r in self.rows)
+        # from live rows, not from self.rows: those are filtered, and a
+        # machine wide total that moves when you type a search term is wrong
+        disk = sum(r.get("disk", 0) for r in live)
         stale = max(0, self.history["bytes"] - disk)
         line = (f" cpu {sum(r['cpu'] for r in live):.1f}%"
                 f"   mem {human_bytes(sum(r['rss'] for r in live), unit_kb=True)}"
                 f"   disk {human_bytes(disk)} active"
                 f"   history {self.history['ended']} sessions, {human_bytes(stale)}")
-        self.screen.addnstr(1, 0, line, width - 1, curses.A_DIM)
+        self._put(1, 0, line, width - 1, curses.A_DIM)
 
         note = self.advisory()
         if note:
             column = min(len(line) + 3, width - 2)
-            self.screen.addnstr(1, column, note, max(0, width - column - 1),
+            self._put(1, column, note, max(0, width - column - 1),
                                 curses.color_pair(self.C_WARNING))
 
     def advisory(self):
@@ -547,25 +605,25 @@ class Tui:
     def draw_footer(self, height, width):
         if self.editing_filter:
             prompt = f" filter: {self.filter_text}"
-            self.screen.addnstr(height - 1, 0, prompt.ljust(width - 1), width - 1,
+            self._put(height - 1, 0, prompt.ljust(width - 1), width - 1,
                                 curses.color_pair(self.C_SELECTED))
             return
         if self.pending:
             text = f" {self.pending[0]}  [y] confirm  [n] cancel"
-            self.screen.addnstr(height - 1, 0, text.ljust(width - 1), width - 1,
+            self._put(height - 1, 0, text.ljust(width - 1), width - 1,
                                 curses.color_pair(self.C_WARNING))
             return
         # the note and the legend share a line: a note is worth interrupting the
         # legend for, and it is gone again in a few seconds
         if self.message and time.time() - self.message_at < MESSAGE_SECONDS:
-            self.screen.addnstr(height - 2, 0, f" {self.message}", width - 1,
+            self._put(height - 2, 0, f" {self.message}", width - 1,
                                 curses.color_pair(self.C_WARNING))
         else:
             self.draw_legend(height - 2, width)
         mode = "hide ended" if self.show_ended else "show ended"
         keys = (" up/down   enter details   k stop   b background   p prune"
                 f"   e {mode}   s sort   S reverse   / filter   q quit")
-        self.screen.addnstr(height - 1, 0, keys.ljust(width - 1), width - 1,
+        self._put(height - 1, 0, keys.ljust(width - 1), width - 1,
                             curses.color_pair(self.C_HEADER))
 
     def draw_legend(self, screen_row, width):
@@ -587,7 +645,7 @@ class Tui:
             placed.append((len(text), agent))
             text += agent + "  "
         text = text.rstrip()
-        self.screen.addnstr(screen_row, 0, text, width - 1, curses.A_DIM)
+        self._put(screen_row, 0, text, width - 1, curses.A_DIM)
 
         # a long agent list leaves no room for a sentence on an 80 column
         # terminal, and dropping the note entirely is worse than abbreviating it
@@ -599,14 +657,14 @@ class Tui:
         for note in (wordy, f"sort: {name} {arrow}" if column else "sort: agent"):
             at = width - len(note) - 2
             if at > len(text) + 3:
-                self.screen.addnstr(screen_row, at, note, len(note),
+                self._put(screen_row, at, note, len(note),
                                     curses.color_pair(self.C_SORT) | curses.A_BOLD)
                 break
 
         for at, agent in placed:
             if at >= width - 1:
                 continue
-            self.screen.addnstr(screen_row, at, agent, min(len(agent), width - 1 - at),
+            self._put(screen_row, at, agent, min(len(agent), width - 1 - at),
                                 self.agent_colour.get(agent, 0) | curses.A_BOLD)
 
     def confirm_kill(self, row):
@@ -711,6 +769,11 @@ class Tui:
 
         # moving around means the last result has been read, so drop the note
         # early rather than leaving it to time out under a different row
+        if key == curses.KEY_RESIZE:
+            curses.update_lines_cols()
+            self.cursor = max(0, min(self.cursor, len(self.rows) - 1))
+            return True
+
         if key in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_HOME, curses.KEY_END,
                    ord("j"), ord("K")):
             self.message = ""
@@ -751,12 +814,10 @@ class Tui:
         elif key == ord("s"):
             self.sort = (self.sort + 1) % len(SORTS)
             self.descending = SORTS[self.sort][3]
-            self.cursor = 0
-            self.poll()
+            self.reshape()
         elif key == ord("S"):
             self.descending = not self.descending
-            self.cursor = 0
-            self.poll()
+            self.reshape()
         elif key in (ord("r"), ord("R")):
             self.poll()
             self.message = ""
@@ -791,11 +852,10 @@ class Tui:
     def handle_filter(self, key):
         if key in (10, 13, curses.KEY_ENTER):
             self.editing_filter = False
-            self.poll()
         elif key == 27:
             self.editing_filter = False
             self.filter_text = ""
-            self.poll()
+            self.reshape()
         elif key in (curses.KEY_BACKSPACE, 127, 8):
             # backspacing past the last character leaves filter mode, so the key
             # hints come back without needing escape
@@ -805,10 +865,10 @@ class Tui:
                 self.filter_text = self.filter_text[:-1]
                 if not self.filter_text:
                     self.editing_filter = False
-                self.poll()
+                self.reshape()
         elif 32 <= key < 127:
             self.filter_text += chr(key)
-            self.poll()
+            self.reshape()
         return True
 
     def loop(self):

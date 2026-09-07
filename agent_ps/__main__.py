@@ -299,6 +299,9 @@ def main():
     except UnknownAgent as error:
         print(error, file=sys.stderr)
         return 2
+    # ncurses waits a second after ESC to see if a sequence follows, and esc
+    # cancels the filter, the panel and the confirmation
+    os.environ.setdefault("ESCDELAY", "25")
     try:
         curses.wrapper(lambda screen: Tui(screen, snapshot).loop())
     except KeyboardInterrupt:

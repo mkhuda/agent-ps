@@ -1,3 +1,3 @@
 """agent-ps: a process table for coding agent sessions."""
 
-VERSION = "0.6.2"
+VERSION = "0.6.3"

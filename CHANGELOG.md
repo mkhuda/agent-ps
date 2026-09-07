@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.3
+
+Two crashes, and a cursor that could move under your hand.
+
+- Shrinking the terminal window no longer kills the program. Nothing guarded a
+  write against a screen that changed size between the layout and the draw.
+  Below six rows or forty columns it now says the terminal is too small rather
+  than drawing a broken table.
+- Terminals whose terminfo cannot hide the cursor no longer crash on the first
+  line: `vt100`, `vt220`, `ansi` and `dumb` all failed at `curs_set`.
+- The cursor follows the session it is on, not the position it was at. Sorted
+  by cpu or by last turn the order changes every couple of seconds, so the
+  highlighted row could become a different session between looking at it and
+  pressing `k`.
+- Filtering and sorting no longer read the machine again. Every typed character
+  cost about four tenths of a second; nine characters now cost a tenth of a
+  millisecond.
+- Escape responds at once. ncurses waits a second after it by default, and
+  escape leaves the filter, closes the panel and cancels a confirmation.
+- The history figure no longer moves when a filter is typed, and the session
+  count says how many rows the filter kept.
+
 ## 0.6.2
 
 A stop that worked is no longer reported as a failure.

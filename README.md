@@ -376,7 +376,7 @@ install fetches. The build is reproducible: the same source always produces the
 same bytes, so the committed executable can be checked against the tree.
 
 ```
-fb81708bdedfee2dea7f83bf92cc3b4f32596a02af7d2e6383c92acd57790a4b  agent-ps
+33233c59c010075655ca0b7f08efe1c016b7091913a3df04e3e91ed8132df45a  agent-ps
 ```
 
 Adding an agent takes one class and one line in the registry. See

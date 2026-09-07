@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import curses
 
 from agent_ps import ui, util
-from agent_ps.ui import Tui
+from agent_ps.ui import SORTS, Tui
 from agent_ps.backends.base import KIND_ENDED, KIND_SESSION, blank_row
 from agent_ps.collect import is_live, idle_seconds
 
@@ -341,3 +341,113 @@ class ReclaimableTotal(unittest.TestCase):
     def test_a_recent_session_is_left_out(self):
         made = self.snapshot([self.session("a", 30), self.session("b", 1)])
         self.assertEqual(made.reclaimable(time.time() - 7 * 86400), (1_000_000, 1))
+
+
+class Resilience(unittest.TestCase):
+    """What the drawing layer does when the screen is not what it expected."""
+
+    class Screen:
+        def __init__(self, fail=False):
+            self.fail, self.calls = fail, []
+
+        def addnstr(self, y, x, text, n, attr=0):
+            self.calls.append((y, x, text, n))
+            if self.fail:
+                raise curses.error("addnwstr() returned ERR")
+
+    def test_a_screen_that_refuses_the_write_does_not_crash(self):
+        tui = Tui.__new__(Tui)
+        tui.screen = self.Screen(fail=True)
+        tui._put(0, 0, "anything", 8)   # must not raise
+
+    def test_nothing_is_written_outside_the_screen(self):
+        tui = Tui.__new__(Tui)
+        tui.screen = self.Screen()
+        for y, x, n in ((-1, 0, 5), (0, -1, 5), (0, 0, 0), (0, 0, -3)):
+            tui._put(y, x, "x", n)
+        self.assertEqual(tui.screen.calls, [], "a doomed write was attempted")
+
+    def test_a_write_that_fits_goes_through(self):
+        tui = Tui.__new__(Tui)
+        tui.screen = self.Screen()
+        tui._put(1, 2, "hello", 5, 0)
+        self.assertEqual(tui.screen.calls, [(1, 2, "hello", 5)])
+
+
+class CursorFollowsTheRow(unittest.TestCase):
+    """Under a live sort the order changes; the cursor must not drift.
+
+    This is a safety property, not a nicety: k acts on whatever the cursor is
+    over, so a cursor that moves on its own stops the wrong session.
+    """
+
+    def tui(self, rows, cursor=0, sort=0):
+        made = Tui.__new__(Tui)
+        made.all_rows = rows
+        made.rows = list(rows)
+        made.cursor = cursor
+        made.filter_text = ""
+        made.sort = sort
+        made.descending = True
+        made.detail = None
+        return made
+
+    def row(self, session, disk=0, **over):
+        return dict(blank_row("claude"), session_id=session, disk=disk, **over)
+
+    def test_the_cursor_stays_on_its_session_when_the_order_changes(self):
+        a, b, c = self.row("a", 10), self.row("b", 20), self.row("c", 30)
+        made = self.tui([a, b, c], cursor=0)
+        made.rows = [a, b, c]
+        held = made.selected()
+        self.assertEqual(held["session_id"], "a")
+        # the same three rows arrive sorted by disk, so "a" is now last
+        made.all_rows = [c, b, a]
+        made.sort = next(i for i, s in enumerate(SORTS) if s[0] == "disk")
+        made.reshape()
+        self.assertEqual(made.selected()["session_id"], "a",
+                         "the cursor followed the position, not the session")
+
+    def test_the_cursor_falls_back_when_its_session_is_gone(self):
+        a, b = self.row("a"), self.row("b")
+        made = self.tui([a, b], cursor=1)
+        made.rows = [a, b]
+        made.all_rows = [a]          # b ended between polls
+        made.reshape()
+        self.assertEqual(made.cursor, 0)
+
+    def test_filtering_keeps_the_cursor_on_a_row_that_survives(self):
+        a, b = self.row("a", title="keep me"), self.row("b", title="other")
+        made = self.tui([a, b], cursor=0)
+        made.rows = [a, b]
+        made.filter_text = "keep"
+        made.reshape()
+        self.assertEqual(made.rows, [a])
+        self.assertEqual(made.cursor, 0)
+
+
+class ReshapeReadsNothing(unittest.TestCase):
+    """Sorting and filtering are questions about rows already in hand."""
+
+    class Exploding:
+        def rows(self, *a, **k):
+            raise AssertionError("reshape asked the machine again")
+
+        def history(self, force=False):
+            raise AssertionError("reshape asked the machine again")
+
+    def test_reshape_never_touches_the_snapshot(self):
+        made = Tui.__new__(Tui)
+        made.snapshot = self.Exploding()
+        made.all_rows = [dict(blank_row("claude"), session_id="a")]
+        made.rows, made.cursor, made.detail = [], 0, None
+        made.filter_text, made.sort, made.descending = "a", 0, True
+        made.reshape()      # must not raise
+
+
+class SummaryArithmetic(unittest.TestCase):
+    def test_history_starts_with_every_key_the_advisory_reads(self):
+        made = Tui.__new__(Tui)
+        Tui.__init__(made, None, None)
+        for key in ("bytes", "ended", "recent", "spare", "spare_sessions"):
+            self.assertIn(key, made.history)
