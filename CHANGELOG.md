@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.2
+
+- DIR no longer cuts off the end of a long directory name when it is the
+  distinguishing part (e.g. two similarly named git worktrees). The cut now
+  happens at the front, keeping the tail, matching how every other path in
+  this column is already shortened.
+
 ## 0.7.1
 
 - SESSION column is wider, so a typical project directory name is no longer cut off

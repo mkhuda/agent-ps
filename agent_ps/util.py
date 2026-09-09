@@ -90,7 +90,12 @@ def short_path(path, width=25):
     while len(parts) > 1 and len(os.sep.join(parts)) + 4 > width:
         parts.pop(0)
     short = ".../" + os.sep.join(parts)
-    return short if len(short) <= width else short[:width - 1] + "\u2026"
+    if len(short) <= width:
+        return short
+    # the last whole segment does not fit even on its own. Two of these are
+    # usually distinguished by their tail, not their head (a worktree suffix,
+    # a numbered clone), so the cut goes at the front instead of the back
+    return "\u2026" + os.sep.join(parts)[-(width - 1):]
 
 
 def decode_project_dir(directory):

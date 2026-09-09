@@ -45,6 +45,15 @@ class Formatting(unittest.TestCase):
     def test_a_path_that_fits_is_left_alone(self):
         self.assertEqual(util.short_path("/tmp/work", 25), "/tmp/work")
 
+    def test_a_long_single_segment_keeps_its_tail_not_its_head(self):
+        """Two worktrees differing only by a trailing suffix must stay
+        distinguishable, not collapse to the same truncated text."""
+        a = util.short_path("/Users/rg/projects/ottoshare-factory-7e", 23)
+        b = util.short_path("/Users/rg/projects/ottoshare-factory-cb", 23)
+        self.assertNotEqual(a, b)
+        self.assertTrue(a.endswith("7e"), a)
+        self.assertTrue(b.endswith("cb"), b)
+
 
 class Columns(unittest.TestCase):
     def test_an_inferred_pairing_is_marked(self):
