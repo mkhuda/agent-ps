@@ -52,3 +52,14 @@ process cost no code anywhere else.
 
 Add the class to `backends/__init__.py` and it appears everywhere, colour
 included, since the palette is assigned by position rather than by name.
+
+## Changelog entries
+
+A new version's `## X.Y.Z` section skips the old style of a prose summary
+paragraph and long, explained bullets. Go straight to a short bullet list —
+one line per feature or fix shipped, no rationale needed there.
+
+`scripts/release_notes.py` only prepends a summary to the release title when
+a section's first line is not a bullet, so a section that starts straight
+with bullets gets a release titled plainly `vX.Y.Z`, and the bullets become
+the release notes untouched.
