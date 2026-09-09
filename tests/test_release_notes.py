@@ -76,7 +76,11 @@ class Reading(unittest.TestCase):
 
 
 class AgainstTheRealChangelog(unittest.TestCase):
-    def test_every_released_version_has_a_title_and_notes(self):
+    def test_every_released_version_has_notes(self):
+        """A title is optional now: a section of plain bullets gets a plain
+        `vX.Y.Z` release title, which is the convention going forward. See
+        CONTRIBUTING.md's "Changelog entries" section.
+        """
         import re
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(root, "CHANGELOG.md")) as handle:
@@ -85,9 +89,8 @@ class AgainstTheRealChangelog(unittest.TestCase):
         self.assertTrue(versions, "no released versions found")
         for version in versions:
             with self.subTest(version):
-                title, notes = release_notes.split(
+                _, notes = release_notes.split(
                     release_notes.section(version, text))
-                self.assertTrue(title, f"{version} has no summary line")
                 self.assertTrue(notes, f"{version} has no notes")
 
 
