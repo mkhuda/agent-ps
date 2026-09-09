@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1
+
+- SESSION column is wider, so a typical project directory name is no longer cut off
+- Session name now shows in the detail panel, next to the session id
+- The header title now shows the running version, e.g. `agent-ps 0.7.1`
+
 ## 0.7.0
 
 Sessions now say when their last turn hit a rate limit, an auth failure, or a

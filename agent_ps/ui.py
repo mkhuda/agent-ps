@@ -9,7 +9,7 @@ import os
 import shutil
 import time
 
-from . import backends
+from . import VERSION, backends
 from .collect import ATTACH_WINDOW, idle_seconds, is_live
 from .backends.base import (ATTACH_INFERRED, KIND_ENDED, KIND_SESSION,
                             STATUS_BUSY)
@@ -100,7 +100,7 @@ def idle_label(row):
 COLUMNS = [
     ("PID", 8, pid_label),
     ("AGENT", 18, agent_label),
-    ("SESSION", 16, lambda r: r["name"] or "-"),
+    ("SESSION", 24, lambda r: r["name"] or "-"),
     ("STATUS", 7, status_label),
     ("MODEL", 20, model_label),
     ("UPTIME", 8, lambda r: human_duration(r["uptime"]) if r["pid"] else "-"),
@@ -494,6 +494,7 @@ class Tui:
         session = [
             ("agent", agent_label(row), self.agent_colour.get(row["agent"], 0)),
             ("session", row["session_id"] or "not matched to a session", 0),
+            ("name", row["name"] or "-", 0),
             ("status", status_label(row),
              self.style["busy"] if row["status"] == STATUS_BUSY else 0),
             ("model", row["model"] or "-", 0),
@@ -629,10 +630,13 @@ class Tui:
         if self.filter_text:
             state = f"/{self.filter_text}   " + state
 
+        title = f"agent-ps {VERSION}"
         self.screen.attron(curses.A_BOLD)
-        self._put(0, 1, "agent-ps", width - 2)
+        self._put(0, 1, title, width - 2)
         self.screen.attroff(curses.A_BOLD)
-        self._put(0, 10, f"  {'  '.join(parts)}   {state}", width - 11)
+        start = 1 + len(title)
+        self._put(0, start, f"  {'  '.join(parts)}   {state}",
+                            max(0, width - start - 1))
 
         # from live rows, not from self.rows: those are filtered, and a
         # machine wide total that moves when you type a search term is wrong
